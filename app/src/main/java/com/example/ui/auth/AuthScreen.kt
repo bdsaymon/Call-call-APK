@@ -230,7 +230,8 @@ fun attemptAutoSignIn(
     onUnauthenticated: () -> Unit,
     scope: CoroutineScope
 ) {
-    if (Firebase.auth.currentUser != null) {
+    val currentFirebaseUser = runCatching { Firebase.auth.currentUser }.getOrNull()
+    if (currentFirebaseUser != null) {
         onAuthSuccess()
         return
     }
@@ -791,7 +792,7 @@ fun LoginScreen(
                                     isLoading = true
                                     val completeVerifiedSignIn: () -> Unit = {
                                         scope.launch {
-                                            val currentUser = Firebase.auth.currentUser
+                                            val currentUser = runCatching { Firebase.auth.currentUser }.getOrNull()
                                             if (currentUser != null && displayNameInput.trim().isNotBlank()) {
                                                 runCatching {
                                                     val profileUpdates = UserProfileChangeRequest.Builder()
@@ -837,7 +838,8 @@ fun LoginScreen(
                                         }
                                     }
 
-                                    if (Firebase.auth.currentUser != null) {
+                                    val isAlreadySignedIn = runCatching { Firebase.auth.currentUser != null }.getOrDefault(false)
+                                    if (isAlreadySignedIn) {
                                         completeVerifiedSignIn()
                                     } else {
                                         onGoogleSignInClicked(

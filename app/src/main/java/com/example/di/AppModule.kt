@@ -22,8 +22,24 @@ object AppModule {
     private var deviceIdentityInstance: DeviceIdentityManager? = null
 
     fun provideFirestore(context: Context): FirebaseFirestore {
-        val databaseId = context.applicationContext.getString(R.string.firestore_database_id)
-        return FirebaseFirestore.getInstance(databaseId)
+        val databaseId = try {
+            context.applicationContext.getString(R.string.firestore_database_id)
+        } catch (_: Exception) {
+            "ai-studio-android-bb67e5ae-b69c-4855-b37e-606187dc144b"
+        }
+        return try {
+            if (com.google.firebase.FirebaseApp.getApps(context.applicationContext).isEmpty()) {
+                com.google.firebase.FirebaseApp.initializeApp(context.applicationContext)
+            }
+            if (databaseId.isNotBlank() && databaseId != "(default)") {
+                FirebaseFirestore.getInstance(databaseId)
+            } else {
+                FirebaseFirestore.getInstance()
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("AppModule", "Firestore initialization fallback: ${e.message}")
+            FirebaseFirestore.getInstance()
+        }
     }
 
     fun provideRoomDatabase(context: Context): NeoTactileDatabase {

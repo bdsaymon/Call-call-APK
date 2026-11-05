@@ -5,17 +5,30 @@
 # For more details, see
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Preservation rules for WebRTC native JNI and reflection
+-keep class org.webrtc.** { *; }
+-dontwarn org.webrtc.**
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Firebase SDK preservation
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# AndroidX Room
+-keep class androidx.room.** { *; }
+-dontwarn androidx.room.**
+
+# AndroidX Media3 / ExoPlayer
+-keep class androidx.media3.** { *; }
+-dontwarn androidx.media3.**
+
+# WebView & JavaScript interfaces
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+-keep class android.webkit.** { *; }
+
+# Keep data model classes for serialization & reflection
+-keep class com.example.data.model.** { *; }
+-keepclassmembers class com.example.data.model.** { *; }
+-keep class com.example.NeoTactileApplication { *; }
+

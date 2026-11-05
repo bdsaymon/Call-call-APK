@@ -131,7 +131,12 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        deviceIdentityManager = AppModule.provideDeviceIdentityManager(this)
+        deviceIdentityManager = try {
+            AppModule.provideDeviceIdentityManager(this)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "DeviceIdentityManager initialization fallback", e)
+            DeviceIdentityManager(applicationContext)
+        }
         enableEdgeToEdge()
         setContent {
             NeoTactileTheme(isLightTheme = true) {
@@ -158,9 +163,11 @@ class MainActivity : FragmentActivity() {
 @Composable
 fun NeoTactileRootApp(
     deviceIdentityManager: DeviceIdentityManager,
-    auth: FirebaseAuth = Firebase.auth
+    auth: FirebaseAuth? = runCatching { Firebase.auth }.getOrNull()
 ) {
-    val currentUser by auth.authStateFlow().collectAsStateWithLifecycle(initialValue = auth.currentUser)
+    val currentUser by remember(auth) {
+        auth?.authStateFlow() ?: kotlinx.coroutines.flow.flowOf(null)
+    }.collectAsStateWithLifecycle(initialValue = auth?.currentUser)
     val hardwareId = remember { deviceIdentityManager.getHardwareAndroidId() }
     val user = currentUser
 

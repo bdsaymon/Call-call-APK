@@ -62,11 +62,11 @@ class NeoTactileRepository(
         localAliasDao
     )
 
-    private val auth
-        get() = Firebase.auth
+    private val auth: com.google.firebase.auth.FirebaseAuth?
+        get() = runCatching { Firebase.auth }.getOrNull()
 
     private fun requireUserId(): String {
-        return auth.currentUser?.uid
+        return auth?.currentUser?.uid
             ?: throw IllegalStateException("User must be signed in with Firebase Auth before accessing Firestore.")
     }
 
@@ -94,8 +94,8 @@ class NeoTactileRepository(
                 val profile = UserProfile(
                     id = uid,
                     uid = uid,
-                    email = email.ifBlank { auth.currentUser?.email ?: "user@whatsapp.app" },
-                    displayName = displayName.ifBlank { auth.currentUser?.displayName ?: "Verified User" },
+                    email = email.ifBlank { auth?.currentUser?.email ?: "user@whatsapp.app" },
+                    displayName = displayName.ifBlank { auth?.currentUser?.displayName ?: "Verified User" },
                     photoUrl = photoUrl,
                     coverUrl = coverUrl ?: "preset://emerald_cover",
                     bio = initialBio.take(300),
@@ -1169,7 +1169,7 @@ class NeoTactileRepository(
 
     suspend fun syncFriendsFromFirestore(friendIds: List<String>) {
         if (friendIds.isEmpty()) return
-        val uid = auth.currentUser?.uid ?: return
+        val uid = auth?.currentUser?.uid ?: return
         val publicSnap = runCatching {
             db.collection("users")
                 .whereEqualTo("isPrivate", false)
@@ -1479,9 +1479,23 @@ class NeoTactileRepository(
         const val TWENTY_FOUR_HOURS_MS = 24L * 60L * 60L * 1000L
 
         private fun createConfiguredFirestore(context: Context): FirebaseFirestore {
-            val instance = FirebaseFirestore.getInstance(
+            val databaseId = try {
                 context.applicationContext.getString(R.string.firestore_database_id)
-            )
+            } catch (_: Exception) {
+                "ai-studio-android-bb67e5ae-b69c-4855-b37e-606187dc144b"
+            }
+            if (com.google.firebase.FirebaseApp.getApps(context.applicationContext).isEmpty()) {
+                com.google.firebase.FirebaseApp.initializeApp(context.applicationContext)
+            }
+            val instance = try {
+                if (databaseId.isNotBlank() && databaseId != "(default)") {
+                    FirebaseFirestore.getInstance(databaseId)
+                } else {
+                    FirebaseFirestore.getInstance()
+                }
+            } catch (_: Exception) {
+                FirebaseFirestore.getInstance()
+            }
             runCatching {
                 instance.firestoreSettings = FirebaseFirestoreSettings.Builder()
                     .setLocalCacheSettings(PersistentCacheSettings.newBuilder().build())
