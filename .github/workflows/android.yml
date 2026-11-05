@@ -87,7 +87,17 @@ jobs:
       - name: Run Unit & Robolectric Verification Tests
         run: |
           set -o pipefail
-          ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace 2>&1 | tee test-output.log
+          # Maven Central intermittently rate-limits GitHub's shared runner
+          # IPs with HTTP 429; Gradle caches whatever downloaded successfully,
+          # so a retry only re-requests the missing artifacts.
+          for attempt in 1 2 3; do
+            if ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace 2>&1 | tee test-output.log; then
+              exit 0
+            fi
+            echo "::warning::Test attempt $attempt failed; retrying in $((attempt * 20))s..."
+            sleep $((attempt * 20))
+          done
+          exit 1
 
       - name: Publish Test Failure Diagnostics
         if: failure()
