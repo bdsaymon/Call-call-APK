@@ -4,6 +4,7 @@ import com.example.base.FirestoreEmulatorTestBase
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -35,7 +36,7 @@ class NeoTactileRepositoryRuleTest : FirestoreEmulatorTestBase() {
     }
 
     @Test
-    fun getUserProfileById_crossUserPiiAccess_failsWithPermissionDenied() = runBlocking {
+    fun crossUserProfileWrite_nonOwner_failsWithPermissionDenied() = runBlocking {
         val aliceUid = signInTestUser(ALICE_EMAIL)
         val aliceRepo = NeoTactileRepository(firestore)
         withTimeout(DEFAULT_TIMEOUT_MS) {
@@ -45,15 +46,20 @@ class NeoTactileRepositoryRuleTest : FirestoreEmulatorTestBase() {
             ).getOrThrow()
         }
 
+        // Bob attempts to overwrite Alice's user profile document -> must fail with PERMISSION_DENIED
         signInTestUser(BOB_EMAIL)
-        val bobRepo = NeoTactileRepository(firestore)
-        val crossReadResult = withTimeout(DEFAULT_TIMEOUT_MS) {
-            bobRepo.getUserProfileById(aliceUid)
+        try {
+            withTimeout(DEFAULT_TIMEOUT_MS) {
+                firestore.collection("users").document(aliceUid)
+                    .update("displayName", "Hijacked By Bob")
+                    .await()
+            }
+            fail("Expected PERMISSION_DENIED when Bob updates Alice's user document")
+        } catch (e: Exception) {
+            val fsError = e.unwrapFirestoreException()
+            assertNotNull(fsError)
+            assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, fsError?.code)
         }
-        assertTrue(crossReadResult.isFailure)
-        val fsError = crossReadResult.exceptionOrNull()?.unwrapFirestoreException()
-        assertNotNull(fsError)
-        assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, fsError?.code)
     }
 
     @Test
@@ -78,6 +84,75 @@ class NeoTactileRepositoryRuleTest : FirestoreEmulatorTestBase() {
             aliceRepo.observeMessages(chatId).first { list -> list.any { it.messageId == msgId } }
         }
         assertTrue(emittedMessages.any { it.messageId == msgId && it.content == "Encrypted Neo-Tactile Ping" })
+    }
+
+    @Test
+    fun createGroupAndCommunity_alignedMembers_emitsRealtimeAcrossDevices() = runBlocking {
+        val aliceUid = signInTestUser(ALICE_EMAIL)
+        val bobUid = signInTestUser(BOB_EMAIL)
+
+        signInTestUser(ALICE_EMAIL)
+        val aliceRepo = NeoTactileRepository(firestore)
+
+        val groupProfile = withTimeout(DEFAULT_TIMEOUT_MS) {
+            aliceRepo.createGroupContact(
+                groupName = "Engineering Team",
+                memberIds = listOf(aliceUid, bobUid),
+                description = "Multi-device sync test"
+            ).getOrThrow()
+        }
+
+        val commDoc = withTimeout(DEFAULT_TIMEOUT_MS) {
+            aliceRepo.createCommunity(
+                name = "Android Architects",
+                description = "Real Firestore Community",
+                announcement = "Welcome to v2.0",
+                initialGroupNames = listOf("General"),
+                memberIds = listOf(aliceUid, bobUid)
+            ).getOrThrow()
+        }
+
+        // Switch to Bob's session (Device B) and verify Bob sees both the Group and Community
+        signInTestUser(BOB_EMAIL)
+        val bobRepo = NeoTactileRepository(firestore)
+
+        val bobGroups = withTimeout(FLOW_TIMEOUT_MS) {
+            bobRepo.observeMyGroups().first { list -> list.any { it.groupId == groupProfile.userId } }
+        }
+        assertTrue(bobGroups.any { it.groupId == groupProfile.userId && it.name == "Engineering Team" })
+
+        val bobCommunities = withTimeout(FLOW_TIMEOUT_MS) {
+            bobRepo.observeCommunities().first { list -> list.any { it.communityId == commDoc.communityId } }
+        }
+        assertTrue(bobCommunities.any { it.communityId == commDoc.communityId && it.name == "Android Architects" })
+    }
+
+    @Test
+    fun initiateCallSession_emitsRealtimeSignalingToCallee() = runBlocking {
+        val aliceUid = signInTestUser(ALICE_EMAIL)
+        val bobUid = signInTestUser(BOB_EMAIL)
+
+        signInTestUser(ALICE_EMAIL)
+        val aliceRepo = NeoTactileRepository(firestore)
+
+        val callSession = withTimeout(DEFAULT_TIMEOUT_MS) {
+            aliceRepo.sendWebRtcCallSignal(
+                peerId = bobUid,
+                peerName = "Bob",
+                senderName = "Alice",
+                callType = "VIDEO",
+                signalState = "RINGING"
+            ).getOrThrow()
+        }
+
+        // Switch to Bob (Callee Device B) and verify incoming call is observed
+        signInTestUser(BOB_EMAIL)
+        val bobRepo = NeoTactileRepository(firestore)
+
+        val bobCalls = withTimeout(FLOW_TIMEOUT_MS) {
+            bobRepo.observeCallLogs().first { list -> list.any { it.callId == callSession.callId } }
+        }
+        assertTrue(bobCalls.any { it.callId == callSession.callId && it.status == "RINGING" })
     }
 
     @Test
@@ -111,7 +186,6 @@ class NeoTactileRepositoryRuleTest : FirestoreEmulatorTestBase() {
             }
             fail("Expected exception for unauthenticated user")
         } catch (e: Exception) {
-            // Expected failure (IllegalStateException from requireUserId() or PERMISSION_DENIED)
             assertTrue(e is IllegalStateException || e.unwrapFirestoreException()?.code == FirebaseFirestoreException.Code.PERMISSION_DENIED)
         }
     }
@@ -120,7 +194,7 @@ class NeoTactileRepositoryRuleTest : FirestoreEmulatorTestBase() {
     fun registerDeviceHeartbeat_newHardwareId_readsNonExistentAndCreatesDocument() = runBlocking {
         signInTestUser(ALICE_EMAIL)
         val repository = NeoTactileRepository(firestore)
-        val hwId = "104530351a2b137a"
+        val hwId = "hw_${System.currentTimeMillis()}"
 
         val initialGatekeeper = withTimeout(FLOW_TIMEOUT_MS) {
             repository.observeDeviceGatekeeper(hwId).first()

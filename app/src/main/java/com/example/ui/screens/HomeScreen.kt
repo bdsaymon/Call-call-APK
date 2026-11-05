@@ -91,6 +91,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.model.AppLanguage
 import com.example.data.model.CallLogEntry
+import com.example.data.model.CommunityModel
 import com.example.data.model.ResolvedContactProfile
 import com.example.data.model.StoryItem
 import com.example.ui.components.NeoTactilePillButton
@@ -212,6 +213,7 @@ fun HomeScreen(
     stories: List<StoryItem>,
     contacts: List<ResolvedContactProfile>,
     callLogs: List<CallLogEntry> = emptyList(),
+    communities: List<CommunityModel> = emptyList(),
     activeStoryViewerItem: StoryItem?,
     onPublishStory: (String, String) -> Unit,
     onOpenStory: (StoryItem) -> Unit,
@@ -281,9 +283,11 @@ fun HomeScreen(
         1 -> WhatsAppUpdatesStatusScreen(
             language = language,
             stories = stories,
+            communities = communities,
             onOpenStory = onOpenStory,
             onOpenTextStatusCreator = { createStatusMode = "TEXT" },
-            onOpenPhotoStatusCreator = { createStatusMode = "PHOTO" }
+            onOpenPhotoStatusCreator = { createStatusMode = "PHOTO" },
+            onExploreChannels = onNavigateToDirectory
         )
         else -> WhatsAppCallsScreen(
             language = language,
@@ -607,9 +611,11 @@ private fun WhatsAppChatListRow(
 fun WhatsAppUpdatesStatusScreen(
     language: AppLanguage,
     stories: List<StoryItem>,
+    communities: List<CommunityModel> = emptyList(),
     onOpenStory: (StoryItem) -> Unit,
     onOpenTextStatusCreator: () -> Unit,
-    onOpenPhotoStatusCreator: () -> Unit
+    onOpenPhotoStatusCreator: () -> Unit,
+    onExploreChannels: () -> Unit = {}
 ) {
     Box(
         modifier = Modifier
@@ -788,17 +794,18 @@ fun WhatsAppUpdatesStatusScreen(
                 )
             }
 
-            // Channels Section (Matches Reference 1 #6 & Reference 2 Updates)
+            // Channels Section (Real Firestore Communities)
             item {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clickable { onExploreChannels() }
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Channels",
+                        text = "Channels & Communities",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = LightTextPrimary
@@ -812,25 +819,24 @@ fun WhatsAppUpdatesStatusScreen(
                 }
             }
 
-            item {
-                ChannelRowItem(
-                    name = "WhatsApp",
-                    subtitle = "New features for you!",
-                    timeOrBadge = "Follow",
-                    isFollowPill = true
-                )
-                ChannelRowItem(
-                    name = "BBC News",
-                    subtitle = "World news update",
-                    timeOrBadge = "3h ago",
-                    isFollowPill = false
-                )
-                ChannelRowItem(
-                    name = "TechCrunch",
-                    subtitle = "AI is changing tech",
-                    timeOrBadge = "1h ago",
-                    isFollowPill = false
-                )
+            if (communities.isEmpty()) {
+                item {
+                    ChannelRowItem(
+                        name = "Create or Join a Community",
+                        subtitle = "Tap Explore > to create a real multi-device community channel",
+                        timeOrBadge = "Open",
+                        isFollowPill = true
+                    )
+                }
+            } else {
+                items(communities, key = { "comm_${it.id.ifBlank { it.communityId }}" }) { comm ->
+                    ChannelRowItem(
+                        name = comm.name,
+                        subtitle = comm.announcementText.ifBlank { comm.description },
+                        timeOrBadge = "${comm.memberIds.size} members",
+                        isFollowPill = false
+                    )
+                }
             }
         }
 

@@ -45,9 +45,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -158,30 +160,22 @@ fun NeoTactileRootApp(
     deviceIdentityManager: DeviceIdentityManager,
     auth: FirebaseAuth = Firebase.auth
 ) {
-    val context = LocalContext.current
     val currentUser by auth.authStateFlow().collectAsStateWithLifecycle(initialValue = auth.currentUser)
-    var manualSession by remember {
-        mutableStateOf(VerifiedAccountStore.getActiveManualSession(context))
-    }
     val hardwareId = remember { deviceIdentityManager.getHardwareAndroidId() }
     val user = currentUser
-    val activeManual = manualSession
 
-    if (user == null && activeManual == null) {
+    if (user == null) {
         LoginScreen(
             hardwareId = hardwareId,
-            onAuthSuccess = {
-                manualSession = VerifiedAccountStore.getActiveManualSession(context)
-            },
-            onManualVerifiedSuccess = { session ->
-                manualSession = session
-            }
+            onAuthSuccess = {},
+            onManualVerifiedSuccess = {}
         )
     } else {
-        val effectiveUid = user?.uid ?: activeManual?.uid ?: "verified_user"
-        val effectiveEmail = user?.email ?: activeManual?.userIdOrEmail ?: "operator@neotactile.app"
-        val effectiveDisplayName = user?.displayName ?: activeManual?.displayName ?: "SAYMON HASAN"
-        val effectivePhotoUrl = user?.photoUrl?.toString()
+        val effectiveUid = user.uid
+        val effectiveEmail = user.email ?: "operator@neotactile.app"
+        val effectiveDisplayName = user.displayName?.ifBlank { null }
+            ?: effectiveEmail.substringBefore("@").uppercase()
+        val effectivePhotoUrl = user.photoUrl?.toString()
 
         AuthenticatedMainShell(
             currentUserId = effectiveUid,
@@ -189,9 +183,7 @@ fun NeoTactileRootApp(
             currentUserDisplayName = effectiveDisplayName,
             currentUserPhotoUrl = effectivePhotoUrl,
             deviceIdentityManager = deviceIdentityManager,
-            onSignOutComplete = {
-                manualSession = null
-            }
+            onSignOutComplete = {}
         )
     }
 }
@@ -237,7 +229,8 @@ private fun AuthenticatedMainShell(
                     currentUserId = currentUserId,
                     currentUserEmail = currentUserEmail,
                     currentUserDisplayName = currentUserDisplayName,
-                    currentUserPhotoUrl = currentUserPhotoUrl
+                    currentUserPhotoUrl = currentUserPhotoUrl,
+                    appContext = app
                 )
             }
         }
@@ -249,6 +242,12 @@ private fun AuthenticatedMainShell(
     val isAppLocked by viewModel.isAppLocked.collectAsStateWithLifecycle()
     val biometricLockEnabled by viewModel.biometricLockEnabled.collectAsStateWithLifecycle()
     val deviceStorageStats by viewModel.deviceStorageStats.collectAsStateWithLifecycle()
+    val savedMediaFiles by viewModel.savedMediaFiles.collectAsStateWithLifecycle()
+    val deviceContacts by viewModel.deviceContacts.collectAsStateWithLifecycle()
+    val linkedDevices by viewModel.linkedDevices.collectAsStateWithLifecycle()
+    val broadcastLists by viewModel.broadcastLists.collectAsStateWithLifecycle()
+    val activeCallSession by viewModel.activeCallSession.collectAsStateWithLifecycle()
+    val incomingCallSession by viewModel.incomingCallSession.collectAsStateWithLifecycle()
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
     val resolvedContacts by viewModel.resolvedContacts.collectAsStateWithLifecycle()
     val communities by viewModel.communities.collectAsStateWithLifecycle()
@@ -406,6 +405,7 @@ private fun AuthenticatedMainShell(
                             stories = activeStories,
                             contacts = resolvedContacts,
                             callLogs = callLogs,
+                            communities = communities,
                             activeStoryViewerItem = activeStoryViewerItem,
                             onPublishStory = { caption, preset ->
                                 viewModel.publishEphemeralStory(caption, preset)
@@ -513,6 +513,10 @@ private fun AuthenticatedMainShell(
                             onEndWebRtcCall = { elapsedSec ->
                                 viewModel.endActiveWebRtcCall(elapsedSec)
                             },
+                            onTypingChanged = { text ->
+                                viewModel.onMessageInputChanged(text)
+                            },
+                            activeCallSession = activeCallSession,
                             onBackToChatsList = {
                                 currentRoute = NeoTactileRoute.HOME
                             }
@@ -589,9 +593,63 @@ private fun AuthenticatedMainShell(
                                     scope = scope
                                 )
                             },
+                            linkedDevices = linkedDevices,
+                            broadcastLists = broadcastLists,
+                            deviceContacts = deviceContacts,
+                            savedMediaFiles = savedMediaFiles,
+                            contacts = resolvedContacts,
+                            onRemoveLinkedDevice = { viewModel.removeLinkedDevice(it) },
+                            onCreateBroadcastList = { name, ids -> viewModel.createNewBroadcastList(name, ids) },
+                            onSendBroadcastMessage = { doc, text -> viewModel.sendBroadcastToList(doc, text) },
+                            onRefreshContacts = { viewModel.refreshDeviceStorageStats() },
+                            onDeleteMediaFile = { file ->
+                                runCatching { file.delete() }
+                                viewModel.refreshDeviceStorageStats()
+                            },
+                            onAddContactFromQr = { code ->
+                                viewModel.addNewPeerContact(code, code, "preset://avatar_1", "Contact", null)
+                            },
                             initialSubRoute = targetSettingsSubRoute
                         )
                     }
+                }
+
+                // Real-time Incoming Call Signaling Modal (Cross-Device Callee Alert)
+                val incomingCall = incomingCallSession
+                if (incomingCall != null) {
+                    AlertDialog(
+                        onDismissRequest = {},
+                        title = {
+                            Text(
+                                text = "Incoming ${incomingCall.callType.lowercase().replaceFirstChar { it.uppercase() }} Call",
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = "${incomingCall.callerName} is calling you via encrypted WebRTC signaling."
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    viewModel.acceptIncomingWebRtcCall()
+                                    currentRoute = NeoTactileRoute.CHAT
+                                }
+                            ) {
+                                Text("Accept", color = WhatsAppActionGreen, fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    viewModel.declineIncomingWebRtcCall()
+                                }
+                            ) {
+                                Text("Decline", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    )
                 }
             }
         }

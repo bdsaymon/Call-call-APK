@@ -1,0 +1,172 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // =========================================================================
+    // GLOBAL DEFAULT DENY
+    // =========================================================================
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // PRIMITIVE & OWNERSHIP HELPERS
+    // =========================================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+             'email' in request.auth.token &&
+             'email_verified' in request.auth.token &&
+             request.auth.token.email == 'msftashop@gmail.com' &&
+             request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
+    }
+
+    function isValidMediaSize(maxMegabytes) {
+      return request.resource != null &&
+             request.resource.size > 0 &&
+             request.resource.size <= maxMegabytes * 1024 * 1024;
+    }
+
+    function isValidContentType() {
+      return request.resource != null &&
+             request.resource.contentType != null && (
+               request.resource.contentType.matches('image/.*') ||
+               request.resource.contentType.matches('video/.*') ||
+               request.resource.contentType.matches('audio/.*') ||
+               request.resource.contentType.matches('application/pdf') ||
+               request.resource.contentType.matches('application/msword') ||
+               request.resource.contentType.matches('application/vnd\\..*') ||
+               request.resource.contentType.matches('application/zip') ||
+               request.resource.contentType.matches('application/octet-stream') ||
+               request.resource.contentType.matches('text/plain')
+             );
+    }
+
+    function hasValidOwnerMetadata(expectedUploaderId) {
+      return request.resource != null &&
+             request.resource.metadata != null &&
+             'uploaderId' in request.resource.metadata &&
+             request.resource.metadata.uploaderId == expectedUploaderId &&
+             request.resource.metadata.uploaderId == request.auth.uid;
+    }
+
+    function isParticipantInMetadataOrChatId(chatId) {
+      return isSignedIn() && (
+        chatId.matches('.*' + request.auth.uid + '.*') ||
+        (resource != null &&
+         resource.metadata != null &&
+         'uploaderId' in resource.metadata &&
+         resource.metadata.uploaderId == request.auth.uid) ||
+        (resource != null &&
+         resource.metadata != null &&
+         'participantsCsv' in resource.metadata &&
+         resource.metadata.participantsCsv.matches('(^|.*,)' + request.auth.uid + '(,.*|$)'))
+      );
+    }
+
+    // =========================================================================
+    // 1. OWNER-SCOPED CHAT MEDIA (/chat_media/{chatId}/{uploaderId}/{fileName})
+    //    - Read: Only authenticated conversation/group participants, uploader, or admin
+    //    - Create/Update: Only the authenticated uploader (request.auth.uid == uploaderId)
+    //      with verified uploaderId metadata, valid MIME type, and <= 25 MB size
+    //    - Delete: Only the original uploader (request.auth.uid == uploaderId) or admin
+    // =========================================================================
+    match /chat_media/{chatId}/{uploaderId}/{fileName} {
+      allow get, list: if isSignedIn() &&
+                          isValidId(chatId) &&
+                          isValidId(uploaderId) && (
+                            isOwner(uploaderId) ||
+                            isParticipantInMetadataOrChatId(chatId) ||
+                            isAdmin()
+                          );
+
+      allow create, update: if isOwner(uploaderId) &&
+                               isValidId(chatId) &&
+                               isValidId(fileName) &&
+                               isValidMediaSize(25) &&
+                               isValidContentType() &&
+                               hasValidOwnerMetadata(uploaderId);
+
+      allow delete: if isValidId(chatId) &&
+                       isValidId(uploaderId) &&
+                       (isOwner(uploaderId) || isAdmin());
+    }
+
+    // Legacy 2-segment chat media path (/chat_media/{chatId}/{fileName})
+    // Strictly requires uploaderId metadata matching request.auth.uid
+    match /chat_media/{chatId}/{fileName} {
+      allow get, list: if isSignedIn() &&
+                          isValidId(chatId) && (
+                            isParticipantInMetadataOrChatId(chatId) ||
+                            isAdmin()
+                          );
+
+      allow create, update: if isSignedIn() &&
+                               isValidId(chatId) &&
+                               isValidId(fileName) &&
+                               isValidMediaSize(25) &&
+                               isValidContentType() &&
+                               hasValidOwnerMetadata(request.auth.uid) &&
+                               (resource == null || resource.metadata.uploaderId == request.auth.uid);
+
+      allow delete: if isSignedIn() &&
+                       isValidId(chatId) &&
+                       ((resource != null && resource.metadata != null && resource.metadata.uploaderId == request.auth.uid) || isAdmin());
+    }
+
+    // =========================================================================
+    // 2. EPHEMERAL 24-HOUR STORY MEDIA (/story_media/{userId}/{fileName})
+    //    - Read: Authenticated users
+    //    - Create/Update/Delete: Strictly isolated to the story owner (request.auth.uid == userId)
+    // =========================================================================
+    match /story_media/{userId}/{fileName} {
+      allow get, list: if isSignedIn() && isValidId(userId);
+
+      allow create, update: if isOwner(userId) &&
+                               isValidId(fileName) &&
+                               isValidMediaSize(15) &&
+                               (request.resource.contentType.matches('image/.*') ||
+                                request.resource.contentType.matches('video/.*'));
+
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // =========================================================================
+    // 3. USER PROFILE & GROUP AVATARS (/avatars/{userId}/{fileName} & /profile_avatars/{userId}/{fileName})
+    //    - Read: Authenticated users
+    //    - Create/Update/Delete: Strictly isolated to the profile owner (request.auth.uid == userId)
+    // =========================================================================
+    match /avatars/{userId}/{fileName} {
+      allow get, list: if isSignedIn() && isValidId(userId);
+
+      allow create, update: if isOwner(userId) &&
+                               isValidId(fileName) &&
+                               isValidMediaSize(10) &&
+                               request.resource.contentType.matches('image/.*');
+
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    match /profile_avatars/{userId}/{fileName} {
+      allow get, list: if isSignedIn() && isValidId(userId);
+
+      allow create, update: if isOwner(userId) &&
+                               isValidId(fileName) &&
+                               isValidMediaSize(10) &&
+                               request.resource.contentType.matches('image/.*');
+
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+  }
+}

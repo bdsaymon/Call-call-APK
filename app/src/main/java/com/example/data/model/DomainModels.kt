@@ -42,6 +42,10 @@ data class UserProfile(
     val bio: String? = null,
     val isPrivate: Boolean = false,
     val friendsList: List<String> = emptyList(),
+    val pinnedChatIds: List<String> = emptyList(),
+    val archivedChatIds: List<String> = emptyList(),
+    val blockedUserIds: List<String> = emptyList(),
+    val starredMessageIds: List<String> = emptyList(),
     val fcmToken: String? = null,
     val isOnline: Boolean = true,
     @ServerTimestamp val lastSeen: Timestamp? = null,
@@ -74,7 +78,7 @@ data class UserProfile(
                 .replace(Regex("@[a-zA-Z0-9_\\.]+\\s*\\|?\\s*"), "")
                 .replace(Regex("tel:[+0-9\\-]+\\s*\\|?\\s*"), "")
                 .trim()
-                .ifBlank { "Hey there! I am using NeoTactile." }
+                .ifBlank { "Hey there! I am using WhatsApp." }
         }
 
     @Suppress("UNCHECKED_CAST")
@@ -88,6 +92,10 @@ data class UserProfile(
             "bio" to bio?.take(300),
             "isPrivate" to isPrivate,
             "friendsList" to friendsList.take(50),
+            "pinnedChatIds" to pinnedChatIds.take(50),
+            "archivedChatIds" to archivedChatIds.take(50),
+            "blockedUserIds" to blockedUserIds.take(50),
+            "starredMessageIds" to starredMessageIds.take(50),
             "fcmToken" to fcmToken?.take(300),
             "isOnline" to isOnline,
             "lastSeen" to FieldValue.serverTimestamp(),
@@ -201,6 +209,249 @@ data class StoryItem(
 }
 
 @IgnoreExtraProperties
+data class GroupChatDocument(
+    @DocumentId val id: String = "",
+    val groupId: String = "",
+    val name: String = "",
+    val description: String = "",
+    val avatarUrl: String? = null,
+    val creatorUid: String = "",
+    val memberIds: List<String> = emptyList(),
+    val adminIds: List<String> = emptyList(),
+    val communityId: String? = null,
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+) {
+    @Suppress("UNCHECKED_CAST")
+    fun toCreateMap(): Map<String, Any> {
+        return mapOf(
+            "groupId" to groupId,
+            "name" to name.take(80),
+            "description" to description.take(300),
+            "avatarUrl" to avatarUrl?.take(500),
+            "creatorUid" to creatorUid,
+            "memberIds" to memberIds.distinct().take(30),
+            "adminIds" to adminIds.distinct().take(10),
+            "communityId" to communityId?.take(128),
+            "createdAt" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
+        ).filterValues { it != null } as Map<String, Any>
+    }
+}
+
+@IgnoreExtraProperties
+data class CommunityModel(
+    @DocumentId val id: String = "",
+    val communityId: String = "",
+    val name: String = "",
+    val description: String = "",
+    val creatorUid: String = "",
+    val announcementText: String = "",
+    val groupIds: List<String> = emptyList(),
+    val memberIds: List<String> = emptyList(),
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+) {
+    val createdAtMs: Long
+        get() = createdAt?.toDate()?.time ?: System.currentTimeMillis()
+
+    @Suppress("UNCHECKED_CAST")
+    fun toCreateMap(): Map<String, Any> {
+        return mapOf(
+            "communityId" to communityId,
+            "name" to name.take(80),
+            "description" to description.take(300),
+            "creatorUid" to creatorUid,
+            "announcementText" to announcementText.take(1000),
+            "groupIds" to groupIds.distinct().take(20),
+            "memberIds" to memberIds.distinct().take(50),
+            "createdAt" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
+        ).filterValues { it != null } as Map<String, Any>
+    }
+}
+
+@IgnoreExtraProperties
+data class CallLogEntry(
+    @DocumentId val id: String = "",
+    val callId: String = "",
+    val callerId: String = "",
+    val callerName: String = "",
+    val calleeId: String = "",
+    val calleeName: String = "",
+    val participantIds: List<String> = emptyList(),
+    val callType: String = "AUDIO", // "AUDIO" | "VIDEO"
+    val status: String = "RINGING", // "RINGING" | "CONNECTED" | "REJECTED" | "ENDED" | "MISSED"
+    val sdpOffer: String = "",
+    val sdpAnswer: String? = null,
+    val iceCandidates: String? = null,
+    val turnServer: String = "stun:stun.l.google.com:19302",
+    val durationSeconds: Int = 0,
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null,
+    val peerId: String = "",
+    val peerName: String = "",
+    val direction: String = "OUTGOING"
+) {
+    val timestampMs: Long
+        get() = createdAt?.toDate()?.time ?: System.currentTimeMillis()
+
+    val sdpInfo: String
+        get() = sdpOffer.ifBlank { "v=0 o=- ${callId.hashCode()} 2 IN IP4 0.0.0.0 s=WebRTC t=0 0 a=group:BUNDLE 0" }
+
+    fun resolvedForUser(currentUid: String): CallLogEntry {
+        val isOutgoing = callerId == currentUid || callerId.isBlank()
+        val effectivePeerId = when {
+            peerId.isNotBlank() -> peerId
+            isOutgoing -> calleeId
+            else -> callerId
+        }
+        val effectivePeerName = when {
+            peerName.isNotBlank() -> peerName
+            isOutgoing -> calleeName
+            else -> callerName
+        }
+        val effectiveDirection = when {
+            status == "MISSED" || (status == "REJECTED" && !isOutgoing) -> "MISSED"
+            isOutgoing -> "OUTGOING"
+            else -> "INCOMING"
+        }
+        return copy(
+            peerId = effectivePeerId,
+            peerName = effectivePeerName.ifBlank { "Contact" },
+            direction = effectiveDirection
+        )
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    fun toCreateMap(): Map<String, Any> {
+        val participants = if (participantIds.isNotEmpty()) {
+            participantIds.distinct().take(10)
+        } else {
+            listOf(callerId, calleeId).filter { it.isNotBlank() }.distinct()
+        }
+        return mapOf(
+            "callId" to callId,
+            "callerId" to callerId,
+            "callerName" to callerName.take(80),
+            "calleeId" to calleeId,
+            "calleeName" to calleeName.take(80),
+            "participantIds" to participants,
+            "callType" to callType,
+            "status" to status,
+            "sdpOffer" to sdpOffer.take(8000),
+            "sdpAnswer" to sdpAnswer?.take(8000),
+            "iceCandidates" to iceCandidates?.take(8000),
+            "turnServer" to turnServer.take(200),
+            "durationSeconds" to durationSeconds.coerceIn(0, 86400),
+            "createdAt" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
+        ).filterValues { it != null } as Map<String, Any>
+    }
+}
+
+@IgnoreExtraProperties
+data class MediaBlobDocument(
+    @DocumentId val id: String = "",
+    val mediaId: String = "",
+    val uploaderId: String = "",
+    val chatId: String = "",
+    val fileName: String = "",
+    val mimeType: String = "application/octet-stream",
+    val mediaType: String = "FILE", // IMAGE | VIDEO | AUDIO | FILE
+    val base64Data: String = "",
+    val participantIds: List<String> = emptyList(),
+    @ServerTimestamp val createdAt: Timestamp? = null
+) {
+    @Suppress("UNCHECKED_CAST")
+    fun toCreateMap(): Map<String, Any> {
+        return mapOf(
+            "mediaId" to mediaId,
+            "uploaderId" to uploaderId,
+            "chatId" to chatId.take(128),
+            "fileName" to fileName.take(200),
+            "mimeType" to mimeType.take(100),
+            "mediaType" to mediaType,
+            "base64Data" to base64Data.take(750_000),
+            "participantIds" to participantIds.distinct().take(30),
+            "createdAt" to FieldValue.serverTimestamp()
+        )
+    }
+}
+
+@IgnoreExtraProperties
+data class TypingStateDocument(
+    @DocumentId val id: String = "",
+    val typingId: String = "",
+    val chatId: String = "",
+    val senderId: String = "",
+    val senderName: String = "",
+    val participantIds: List<String> = emptyList(),
+    val isTyping: Boolean = false,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+) {
+    fun toCreateMap(): Map<String, Any> {
+        return mapOf(
+            "typingId" to typingId,
+            "chatId" to chatId.take(128),
+            "senderId" to senderId,
+            "senderName" to senderName.take(80),
+            "participantIds" to participantIds.distinct().take(30),
+            "isTyping" to isTyping,
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+    }
+}
+
+@IgnoreExtraProperties
+data class LinkedDeviceSession(
+    @DocumentId val id: String = "",
+    val sessionId: String = "",
+    val ownerUid: String = "",
+    val hardwareId: String = "",
+    val deviceModel: String = "",
+    val platform: String = "",
+    val isActive: Boolean = true,
+    @ServerTimestamp val lastActive: Timestamp? = null,
+    @ServerTimestamp val createdAt: Timestamp? = null
+) {
+    fun toCreateMap(): Map<String, Any> {
+        return mapOf(
+            "sessionId" to sessionId,
+            "ownerUid" to ownerUid,
+            "hardwareId" to hardwareId.take(128),
+            "deviceModel" to deviceModel.take(120),
+            "platform" to platform.take(80),
+            "isActive" to isActive,
+            "lastActive" to FieldValue.serverTimestamp(),
+            "createdAt" to FieldValue.serverTimestamp()
+        )
+    }
+}
+
+@IgnoreExtraProperties
+data class BroadcastListDocument(
+    @DocumentId val id: String = "",
+    val listId: String = "",
+    val ownerUid: String = "",
+    val name: String = "",
+    val recipientIds: List<String> = emptyList(),
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+) {
+    fun toCreateMap(): Map<String, Any> {
+        return mapOf(
+            "listId" to listId,
+            "ownerUid" to ownerUid,
+            "name" to name.take(80),
+            "recipientIds" to recipientIds.distinct().take(50),
+            "createdAt" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+    }
+}
+
+@IgnoreExtraProperties
 data class BlockedDevice(
     @DocumentId val id: String = "",
     val hardwareId: String = "",
@@ -224,11 +475,6 @@ data class BlockedDevice(
     }
 }
 
-/**
- * Dual-Layer Storage Engine Resolved Contact / Group Model:
- * Combines Remote Firestore peer identity with Local Room `local_aliases` override.
- * Strict No-Demo Policy: Populated exclusively from real Firestore users, added contacts, and user-created groups.
- */
 data class ResolvedContactProfile(
     val userId: String,
     val originalDisplayName: String,
@@ -266,30 +512,6 @@ data class ResolvedContactProfile(
     private fun String?.isNotBlankOrNull(): Boolean = !this.isNullOrBlank()
 }
 
-data class CommunityModel(
-    val communityId: String,
-    val name: String,
-    val description: String,
-    val creatorUid: String,
-    val announcementText: String,
-    val groupIds: List<String>,
-    val memberIds: List<String>,
-    val createdAtMs: Long = System.currentTimeMillis()
-)
-
-data class CallLogEntry(
-    val callId: String,
-    val peerId: String,
-    val peerName: String,
-    val callType: String, // "AUDIO" | "VIDEO"
-    val direction: String, // "OUTGOING" | "INCOMING" | "MISSED"
-    val status: String, // "RINGING" | "CONNECTED" | "ENDED" | "REJECTED"
-    val sdpInfo: String = "v=0 o=- 4611731400430051336 2 IN IP4 127.0.0.1 s=- t=0 0 a=group:BUNDLE 0",
-    val turnServer: String = "stun:stun.l.google.com:19302",
-    val durationSeconds: Int = 0,
-    val timestampMs: Long = System.currentTimeMillis()
-)
-
 data class ContactRequestItem(
     val requestId: String,
     val fromUserId: String,
@@ -298,6 +520,11 @@ data class ContactRequestItem(
     val toUserId: String,
     val status: String = "PENDING", // PENDING | ACCEPTED | REJECTED
     val timestampMs: Long = System.currentTimeMillis()
+)
+
+data class DevicePhoneContact(
+    val name: String,
+    val phoneNumber: String
 )
 
 fun generateShortCode(rawId: String): String {

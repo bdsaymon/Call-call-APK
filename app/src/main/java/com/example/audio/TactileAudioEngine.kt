@@ -1,6 +1,8 @@
 package com.example.audio
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaRecorder
@@ -8,9 +10,13 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.StatFs
+import android.provider.ContactsContract
+import android.util.Base64
+import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.example.data.model.DevicePhoneContact
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,6 +28,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Locale
@@ -37,10 +44,12 @@ data class DeviceStorageStats(
 )
 
 /**
- * Tactile Audio & Mobile Storage Engine:
- * - Saves all voice recordings, compressed images, and attachments directly into the user's
- *   persistent mobile storage (`getExternalFilesDir("NeoTactileMedia")`).
- * - Inspects real device storage capacity via Android `StatFs`.
+ * Tactile Audio, Media Compression, Cross-Device Blob Materialization & Mobile Storage Engine:
+ * - Saves all voice recordings, compressed images, downloaded peer media, and attachments directly
+ *   into the user's persistent mobile storage (`getExternalFilesDir("NeoTactileMedia")`).
+ * - Encodes and materializes binary payloads so Device B can download and play/render media sent
+ *   from Device A via Firebase Cloud Storage or Firestore `/media_blobs`.
+ * - Inspects real device storage capacity via Android `StatFs` and queries real Android Contacts.
  */
 class TactileAudioEngine(private val context: Context) {
 
@@ -120,7 +129,58 @@ class TactileAudioEngine(private val context: Context) {
     }
 
     /**
-     * Starts recording an AAC / MPEG-4 (.m4a) voice note at 44.1kHz, 128kbps
+     * Lists actual saved files inside `NeoTactileMedia` on the device.
+     */
+    fun listSavedMediaFiles(): List<File> {
+        val rootBase = context.getExternalFilesDir("NeoTactileMedia")
+            ?: File(context.filesDir, "NeoTactileMedia").apply { mkdirs() }
+        return rootBase.walkTopDown()
+            .filter { it.isFile }
+            .sortedByDescending { it.lastModified() }
+            .toList()
+    }
+
+    /**
+     * Queries the user's real Android device contacts when READ_CONTACTS permission is granted.
+     */
+    fun queryRealDeviceContacts(): List<DevicePhoneContact> {
+        val hasPerm = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.READ_CONTACTS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!hasPerm) return emptyList()
+
+        val result = mutableListOf<DevicePhoneContact>()
+        val seenNumbers = mutableSetOf<String>()
+        runCatching {
+            val cursor = context.contentResolver.query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                    ContactsContract.CommonDataKinds.Phone.NUMBER
+                ),
+                null,
+                null,
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
+            )
+            cursor?.use { c ->
+                val nameIdx = c.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                val numIdx = c.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                while (c.moveToNext() && result.size < 50) {
+                    val name = if (nameIdx >= 0) c.getString(nameIdx)?.trim().orEmpty() else ""
+                    val number = if (numIdx >= 0) c.getString(numIdx)?.trim().orEmpty() else ""
+                    val normalizedNum = number.replace(Regex("\\s+"), "")
+                    if (name.isNotBlank() && normalizedNum.isNotBlank() && seenNumbers.add(normalizedNum)) {
+                        result.add(DevicePhoneContact(name = name, phoneNumber = number))
+                    }
+                }
+            }
+        }
+        return result
+    }
+
+    /**
+     * Starts recording an AAC / MPEG-4 (.m4a) voice note at 44.1kHz, 64kbps
      * directly into the user's mobile storage (`NeoTactileMedia/voice_notes`).
      */
     fun startRecording(): File {
@@ -142,7 +202,7 @@ class TactileAudioEngine(private val context: Context) {
             recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
             recorder.setAudioSamplingRate(44100)
-            recorder.setAudioEncodingBitRate(128000)
+            recorder.setAudioEncodingBitRate(64000)
             recorder.setOutputFile(outputFile.absolutePath)
             recorder.prepare()
             recorder.start()
@@ -224,7 +284,7 @@ class TactileAudioEngine(private val context: Context) {
         _playbackProgress.value = 0f
 
         val isLocalRealFile = mediaUrl.startsWith("file://") &&
-            File(Uri.parse(mediaUrl).path ?: "").let { it.exists() && it.length() > 512L }
+            File(Uri.parse(mediaUrl).path ?: "").let { it.exists() && it.length() > 128L }
 
         if (isLocalRealFile || mediaUrl.startsWith("https://")) {
             try {
@@ -301,16 +361,18 @@ class TactileAudioEngine(private val context: Context) {
     }
 
     /**
-     * Compresses and saves a photo directly into the user's mobile storage (`NeoTactileMedia/photos`).
+     * Compresses a photo into `NeoTactileMedia/photos` and returns Pair(LocalFile, Base64Payload)
+     * so it can be uploaded to Firebase Storage AND/OR `/media_blobs` for cross-device viewing.
      */
-    suspend fun compressAndCachePhoto(uri: Uri): String = withContext(Dispatchers.IO) {
+    suspend fun compressAndCachePhotoWithBytes(uri: Uri): Pair<File?, String> = withContext(Dispatchers.IO) {
         try {
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return@withContext uri.toString()
+            val inputStream = context.contentResolver.openInputStream(uri)
+                ?: return@withContext Pair(null, "")
             val originalBitmap = BitmapFactory.decodeStream(inputStream)
             inputStream.close()
-            if (originalBitmap == null) return@withContext uri.toString()
+            if (originalBitmap == null) return@withContext Pair(null, "")
 
-            val maxDim = 960
+            val maxDim = 720
             val ratio = minOf(
                 maxDim.toFloat() / originalBitmap.width.coerceAtLeast(1),
                 maxDim.toFloat() / originalBitmap.height.coerceAtLeast(1),
@@ -322,12 +384,59 @@ class TactileAudioEngine(private val context: Context) {
 
             val photosDir = getMobileStorageMediaDir("photos")
             val outFile = File(photosDir, "img_${System.currentTimeMillis()}.jpg")
+            val baos = ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.JPEG, 70, baos)
+            val bytes = baos.toByteArray()
             FileOutputStream(outFile).use { fos ->
-                scaled.compress(Bitmap.CompressFormat.JPEG, 78, fos)
+                fos.write(bytes)
             }
-            Uri.fromFile(outFile).toString()
+            val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            Pair(outFile, b64)
         } catch (e: Exception) {
-            uri.toString()
+            Pair(null, "")
+        }
+    }
+
+    suspend fun compressAndCachePhoto(uri: Uri): String {
+        val (file, _) = compressAndCachePhotoWithBytes(uri)
+        return if (file != null) Uri.fromFile(file).toString() else uri.toString()
+    }
+
+    /**
+     * Encodes a local file (e.g. voice note .m4a or document) into Base64 for cross-device sync.
+     */
+    suspend fun encodeFileToBase64(file: File, maxBytes: Int = 500_000): String = withContext(Dispatchers.IO) {
+        try {
+            if (!file.exists()) return@withContext ""
+            val bytes = file.readBytes()
+            val slice = if (bytes.size > maxBytes) bytes.copyOf(maxBytes) else bytes
+            Base64.encodeToString(slice, Base64.NO_WRAP)
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    /**
+     * Materializes a remote `/media_blobs/{mediaId}` base64 payload into the recipient device's
+     * local `NeoTactileMedia/downloads` folder so Coil, ExoPlayer, and document viewers can open it natively.
+     */
+    suspend fun materializeBase64BlobToLocalFile(
+        mediaId: String,
+        fileName: String,
+        base64Data: String
+    ): File? = withContext(Dispatchers.IO) {
+        try {
+            val downloadsDir = getMobileStorageMediaDir("downloads")
+            val safeName = "${mediaId}_${fileName.replace(Regex("[^a-zA-Z0-9._\\-]"), "_")}"
+            val targetFile = File(downloadsDir, safeName)
+            if (targetFile.exists() && targetFile.length() > 0L) {
+                return@withContext targetFile
+            }
+            val decoded = Base64.decode(base64Data, Base64.DEFAULT)
+            FileOutputStream(targetFile).use { it.write(decoded) }
+            targetFile
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -339,7 +448,7 @@ class TactileAudioEngine(private val context: Context) {
         val safeName = fileName.replace(Regex("[^a-zA-Z0-9._\\-]"), "_").ifBlank { "doc_${System.currentTimeMillis()}.txt" }
         val outFile = File(docsDir, safeName)
         try {
-            outFile.writeText("NeoTactile Local Storage Document\nFile: $safeName\nNotes: $description\nSavedAt: ${System.currentTimeMillis()}")
+            outFile.writeText("WhatsApp Local Storage Document\nFile: $safeName\nNotes: $description\nSavedAt: ${System.currentTimeMillis()}")
         } catch (_: Exception) {
         }
         return Uri.fromFile(outFile).toString()

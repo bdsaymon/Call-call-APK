@@ -2,7 +2,7 @@
   "entities": {
     "UserProfile": {
       "title": "UserProfile",
-      "description": "User profile document with Neo-Tactile social and privacy settings. PII fields (email, fcmToken) are restricted to owner, friends, or admin on direct get.",
+      "description": "User profile document with social, privacy, and persistent chat state settings. PII fields (email, fcmToken) are restricted to owner, friends, or admin on direct get.",
       "type": "object",
       "properties": {
         "uid": { "type": "string", "description": "Authenticated user UID" },
@@ -13,6 +13,10 @@
         "bio": { "type": "string", "description": "User biography text" },
         "isPrivate": { "type": "boolean", "description": "Whether profile is private" },
         "friendsList": { "type": "array", "description": "Bounded list of friend UIDs (max 50)" },
+        "pinnedChatIds": { "type": "array", "description": "Optional bounded list of pinned chat IDs (max 50)" },
+        "archivedChatIds": { "type": "array", "description": "Optional bounded list of archived chat IDs (max 50)" },
+        "blockedUserIds": { "type": "array", "description": "Optional bounded list of blocked user IDs (max 50)" },
+        "starredMessageIds": { "type": "array", "description": "Optional bounded list of starred message IDs (max 50)" },
         "fcmToken": { "type": "string", "description": "Device push token" },
         "isOnline": { "type": "boolean", "description": "Online presence indicator" },
         "lastSeen": { "type": "string", "format": "date-time", "description": "Server timestamp of last activity (FieldValue.serverTimestamp())" },
@@ -30,7 +34,7 @@
         "chatId": { "type": "string", "description": "Parent conversation ID" },
         "senderId": { "type": "string", "description": "Sender UID" },
         "receiverId": { "type": "string", "description": "Receiver UID or Group ID" },
-        "participantIds": { "type": "array", "description": "Bounded list of participant UIDs (2 to 30) for query alignment" },
+        "participantIds": { "type": "array", "description": "Bounded list of participant UIDs (1 to 30) for query alignment" },
         "senderName": { "type": "string", "description": "Sender display name" },
         "content": { "type": "string", "description": "Text content or caption" },
         "mediaType": { "type": "string", "enum": ["TEXT", "IMAGE", "VIDEO", "AUDIO", "FILE"], "description": "Type of message payload" },
@@ -51,7 +55,7 @@
     },
     "StoryItem": {
       "title": "StoryItem",
-      "description": "24-hour ephemeral story item with glowing cyan ring indicator.",
+      "description": "24-hour ephemeral story item.",
       "type": "object",
       "properties": {
         "storyId": { "type": "string", "description": "Story document ID" },
@@ -66,6 +70,126 @@
         "expiresAt": { "type": "integer", "description": "Expiration epoch timestamp in milliseconds (createdAt + 24h)" }
       },
       "required": ["storyId", "authorId", "authorName", "mediaUrl", "mediaType", "caption", "visibleToUids", "createdAt", "expiresAt"]
+    },
+    "GroupChat": {
+      "title": "GroupChat",
+      "description": "Multi-user group chat document synced across all member devices.",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string", "description": "Unique group ID" },
+        "name": { "type": "string", "description": "Group title" },
+        "description": { "type": "string", "description": "Group description" },
+        "avatarUrl": { "type": "string", "description": "Optional group avatar URI" },
+        "creatorUid": { "type": "string", "description": "UID of group creator" },
+        "memberIds": { "type": "array", "description": "Bounded list of member UIDs (max 30)" },
+        "adminIds": { "type": "array", "description": "Bounded list of admin UIDs (max 10)" },
+        "communityId": { "type": "string", "description": "Optional parent community ID" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())" }
+      },
+      "required": ["groupId", "name", "description", "creatorUid", "memberIds", "adminIds", "createdAt", "updatedAt"]
+    },
+    "Community": {
+      "title": "Community",
+      "description": "Multi-group community document synced across all member devices.",
+      "type": "object",
+      "properties": {
+        "communityId": { "type": "string", "description": "Unique community ID" },
+        "name": { "type": "string", "description": "Community name" },
+        "description": { "type": "string", "description": "Community description" },
+        "creatorUid": { "type": "string", "description": "Creator UID" },
+        "announcementText": { "type": "string", "description": "Latest announcement text" },
+        "groupIds": { "type": "array", "description": "Bounded list of group IDs (max 20)" },
+        "memberIds": { "type": "array", "description": "Bounded list of member UIDs (max 50)" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())" }
+      },
+      "required": ["communityId", "name", "description", "creatorUid", "announcementText", "groupIds", "memberIds", "createdAt", "updatedAt"]
+    },
+    "CallSession": {
+      "title": "CallSession",
+      "description": "Real-time WebRTC audio/video signaling session and call log entry.",
+      "type": "object",
+      "properties": {
+        "callId": { "type": "string", "description": "Unique call session ID" },
+        "callerId": { "type": "string", "description": "Caller UID" },
+        "callerName": { "type": "string", "description": "Caller display name" },
+        "calleeId": { "type": "string", "description": "Callee UID or Group ID" },
+        "calleeName": { "type": "string", "description": "Callee display name" },
+        "participantIds": { "type": "array", "description": "Bounded list of call participants (max 10)" },
+        "callType": { "type": "string", "enum": ["AUDIO", "VIDEO"], "description": "Audio or Video call" },
+        "status": { "type": "string", "enum": ["RINGING", "CONNECTED", "REJECTED", "ENDED", "MISSED"], "description": "Call signaling state" },
+        "sdpOffer": { "type": "string", "description": "WebRTC SDP Offer payload" },
+        "sdpAnswer": { "type": "string", "description": "WebRTC SDP Answer payload" },
+        "iceCandidates": { "type": "string", "description": "Serialized ICE candidate exchange payload" },
+        "turnServer": { "type": "string", "description": "STUN/TURN URI" },
+        "durationSeconds": { "type": "integer", "description": "Call duration in seconds" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())" }
+      },
+      "required": ["callId", "callerId", "callerName", "calleeId", "calleeName", "participantIds", "callType", "status", "sdpOffer", "turnServer", "durationSeconds", "createdAt", "updatedAt"]
+    },
+    "MediaBlob": {
+      "title": "MediaBlob",
+      "description": "Cloud-synced media payload for cross-device photos, voice notes, and documents.",
+      "type": "object",
+      "properties": {
+        "mediaId": { "type": "string", "description": "Unique media blob ID" },
+        "uploaderId": { "type": "string", "description": "Uploader UID" },
+        "chatId": { "type": "string", "description": "Associated conversation or story ID" },
+        "fileName": { "type": "string", "description": "File name" },
+        "mimeType": { "type": "string", "description": "MIME type" },
+        "mediaType": { "type": "string", "enum": ["IMAGE", "VIDEO", "AUDIO", "FILE"], "description": "Media category" },
+        "base64Data": { "type": "string", "description": "Base64-encoded binary content (max 750KB)" },
+        "participantIds": { "type": "array", "description": "Authorized participant UIDs (max 30)" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())" }
+      },
+      "required": ["mediaId", "uploaderId", "chatId", "fileName", "mimeType", "mediaType", "base64Data", "participantIds", "createdAt"]
+    },
+    "TypingState": {
+      "title": "TypingState",
+      "description": "Real-time typing indicator document for a conversation participant.",
+      "type": "object",
+      "properties": {
+        "typingId": { "type": "string", "description": "Composite ID chatId_senderId" },
+        "chatId": { "type": "string", "description": "Conversation ID" },
+        "senderId": { "type": "string", "description": "Typing user UID" },
+        "senderName": { "type": "string", "description": "Typing user display name" },
+        "participantIds": { "type": "array", "description": "Authorized participant UIDs (max 30)" },
+        "isTyping": { "type": "boolean", "description": "Whether user is actively typing" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())" }
+      },
+      "required": ["typingId", "chatId", "senderId", "senderName", "participantIds", "isTyping", "updatedAt"]
+    },
+    "LinkedDevice": {
+      "title": "LinkedDevice",
+      "description": "Active device session linked to an authenticated user.",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "description": "Unique session ID" },
+        "ownerUid": { "type": "string", "description": "User UID" },
+        "hardwareId": { "type": "string", "description": "Device hardware ID" },
+        "deviceModel": { "type": "string", "description": "Device model name" },
+        "platform": { "type": "string", "description": "Platform description" },
+        "isActive": { "type": "boolean", "description": "Whether session is active" },
+        "lastActive": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())" }
+      },
+      "required": ["sessionId", "ownerUid", "hardwareId", "deviceModel", "platform", "isActive", "lastActive", "createdAt"]
+    },
+    "BroadcastList": {
+      "title": "BroadcastList",
+      "description": "Persistent broadcast recipient list owned by a user.",
+      "type": "object",
+      "properties": {
+        "listId": { "type": "string", "description": "Broadcast list ID" },
+        "ownerUid": { "type": "string", "description": "Owner UID" },
+        "name": { "type": "string", "description": "Broadcast list title" },
+        "recipientIds": { "type": "array", "description": "Bounded list of recipient UIDs (max 50)" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())" }
+      },
+      "required": ["listId", "ownerUid", "name", "recipientIds", "createdAt", "updatedAt"]
     },
     "BlockedDevice": {
       "title": "BlockedDevice",
@@ -106,6 +230,34 @@
     "/stories/{storyId}": {
       "schema": { "$ref": "#/entities/StoryItem" },
       "description": "24-hour ephemeral stories scoped via visibleToUids and authorId."
+    },
+    "/groups/{groupId}": {
+      "schema": { "$ref": "#/entities/GroupChat" },
+      "description": "Persistent group chats synced across all member devices."
+    },
+    "/communities/{communityId}": {
+      "schema": { "$ref": "#/entities/Community" },
+      "description": "Persistent communities synced across all member devices."
+    },
+    "/calls/{callId}": {
+      "schema": { "$ref": "#/entities/CallSession" },
+      "description": "Real-time WebRTC signaling sessions and persistent call history."
+    },
+    "/media_blobs/{mediaId}": {
+      "schema": { "$ref": "#/entities/MediaBlob" },
+      "description": "Cross-device media payloads for photos, voice notes, and documents."
+    },
+    "/typing_states/{typingId}": {
+      "schema": { "$ref": "#/entities/TypingState" },
+      "description": "Real-time typing indicator documents."
+    },
+    "/linked_devices/{sessionId}": {
+      "schema": { "$ref": "#/entities/LinkedDevice" },
+      "description": "Active linked device sessions per user."
+    },
+    "/broadcast_lists/{listId}": {
+      "schema": { "$ref": "#/entities/BroadcastList" },
+      "description": "Persistent broadcast lists per user."
     },
     "/blocked_devices/{androidId}": {
       "schema": { "$ref": "#/entities/BlockedDevice" },

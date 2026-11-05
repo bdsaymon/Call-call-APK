@@ -99,12 +99,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.data.model.AppLanguage
+import com.example.data.model.CallLogEntry
 import com.example.data.model.ChatMessage
 import com.example.data.model.ResolvedContactProfile
 import com.example.ui.components.NeoTactilePillButton
 import com.example.ui.components.NeoTactileScrubSlider
+import com.example.ui.components.RealCameraXPreview
+import com.example.ui.components.WebRtcHardwareController
+import com.example.ui.components.WebRtcVideoTrackRenderer
 import com.example.ui.theme.LightBackgroundWhite
 import com.example.ui.theme.LightDividerGray
 import com.example.ui.theme.LightSurfaceSecondary
@@ -174,12 +179,22 @@ fun ChatScreen(
     onNavigateToDirectory: () -> Unit = {},
     onStartWebRtcCall: (peerId: String, peerName: String, callType: String) -> Unit = { _, _, _ -> },
     onEndWebRtcCall: (durationSec: Int) -> Unit = {},
+    onTypingChanged: (String) -> Unit = {},
+    activeCallSession: CallLogEntry? = null,
     onBackToChatsList: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var inputText by remember { mutableStateOf("") }
     var showContactOrGroupInfo by remember { mutableStateOf(false) }
     var activeCallMode by remember { mutableStateOf<String?>(null) } // "AUDIO" or "VIDEO"
+
+    LaunchedEffect(activeCallSession?.id, activeCallSession?.status) {
+        if (activeCallSession != null && (activeCallSession.status == "RINGING" || activeCallSession.status == "CONNECTED")) {
+            activeCallMode = activeCallSession.callType
+        } else if (activeCallSession == null && activeCallMode != null) {
+            activeCallMode = null
+        }
+    }
     var showAliasModal by remember { mutableStateOf(false) }
     var showFileAttachModal by remember { mutableStateOf(false) }
     var showTopMoreMenu by remember { mutableStateOf(false) }
@@ -243,6 +258,7 @@ fun ChatScreen(
         WhatsAppActiveCallScreen(
             contact = activeContact,
             callMode = activeCallMode ?: "AUDIO",
+            activeCallSession = activeCallSession,
             onSwitchToVideo = { activeCallMode = "VIDEO" },
             onEndCall = { elapsedSec ->
                 activeCallMode = null
@@ -680,7 +696,10 @@ fun ChatScreen(
                         }
                         BasicTextField(
                             value = inputText,
-                            onValueChange = { inputText = it },
+                            onValueChange = {
+                                inputText = it
+                                onTypingChanged(it)
+                            },
                             textStyle = TextStyle(
                                 color = LightTextPrimary,
                                 fontSize = 16.sp
@@ -738,6 +757,7 @@ fun ChatScreen(
                             if (inputText.isNotBlank()) {
                                 onSendText(inputText)
                                 inputText = ""
+                                onTypingChanged("")
                             } else {
                                 val hasMicPerm = ContextCompat.checkSelfPermission(
                                     context,
@@ -1627,13 +1647,38 @@ private fun InfoActionButton(
 private fun WhatsAppActiveCallScreen(
     contact: ResolvedContactProfile,
     callMode: String,
+    activeCallSession: CallLogEntry? = null,
     onSwitchToVideo: () -> Unit,
     onEndCall: (Int) -> Unit
 ) {
+    val context = LocalContext.current
     var elapsedSec by remember { mutableIntStateOf(0) }
     var isMuted by remember { mutableStateOf(false) }
-    var isSpeakerOn by remember { mutableStateOf(false) }
+    var isSpeakerOn by remember { mutableStateOf(callMode == "VIDEO") }
     var isCameraOn by remember { mutableStateOf(callMode == "VIDEO") }
+    var useFrontCamera by remember { mutableStateOf(true) }
+
+    val localVideoTrack by WebRtcHardwareController.localVideoTrackFlow.collectAsStateWithLifecycle()
+    val remoteVideoTrack by WebRtcHardwareController.remoteVideoTrackFlow.collectAsStateWithLifecycle()
+    val iceState by WebRtcHardwareController.connectionStateFlow.collectAsStateWithLifecycle()
+
+    LaunchedEffect(isSpeakerOn, isMuted) {
+        WebRtcHardwareController.configureCallAudioSession(
+            context = context,
+            enableSpeakerphone = isSpeakerOn,
+            muteMicrophone = isMuted
+        )
+    }
+
+    LaunchedEffect(isCameraOn) {
+        WebRtcHardwareController.setVideoEnabled(isCameraOn)
+    }
+
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            WebRtcHardwareController.releaseCallAudioSession(context)
+        }
+    }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -1642,8 +1687,13 @@ private fun WhatsAppActiveCallScreen(
         }
     }
 
-    val formattedDuration = remember(elapsedSec) {
-        if (elapsedSec < 2) "Ringing..." else String.format(Locale.US, "%02d:%02d", elapsedSec / 60, elapsedSec % 60)
+    val signalingStatus = activeCallSession?.status ?: "RINGING"
+    val formattedDuration = remember(elapsedSec, signalingStatus, iceState) {
+        if (signalingStatus == "RINGING" && elapsedSec < 3) {
+            "Ringing (WebRTC ICE: $iceState)..."
+        } else {
+            String.format(Locale.US, "%02d:%02d", elapsedSec / 60, elapsedSec % 60)
+        }
     }
 
     Box(
@@ -1653,7 +1703,7 @@ private fun WhatsAppActiveCallScreen(
             .testTag("active_call_screen")
     ) {
         if (callMode == "VIDEO" && isCameraOn) {
-            // Simulated Fullscreen Remote Video Feed + Bottom-Right PiP Self Preview (Screen 15)
+            // Remote Peer Video Track (SurfaceViewRenderer) or Avatar while waiting for remote track (Screen 15)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1668,22 +1718,44 @@ private fun WhatsAppActiveCallScreen(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                WhatsAppAvatarCircle(name = contact.effectiveDisplayName, size = 148.dp)
+                val activeRemoteTrack = remoteVideoTrack
+                if (activeRemoteTrack != null) {
+                    WebRtcVideoTrackRenderer(
+                        videoTrack = activeRemoteTrack,
+                        modifier = Modifier.fillMaxSize(),
+                        mirror = false
+                    )
+                } else {
+                    WhatsAppAvatarCircle(name = contact.effectiveDisplayName, size = 148.dp)
+                }
             }
 
-            // Floating PiP Self Camera Card on Bottom-Right
+            // Floating Live WebRTC Local VideoTrack / CameraX PiP Card on Bottom-Right
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = 20.dp, bottom = 110.dp)
-                    .width(96.dp)
-                    .height(132.dp)
+                    .width(104.dp)
+                    .height(144.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .background(Color(0xFF1F2C34))
                     .border(1.5.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(14.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                WhatsAppAvatarCircle(name = "Me", size = 48.dp)
+                val activeLocalTrack = localVideoTrack
+                if (activeLocalTrack != null) {
+                    WebRtcVideoTrackRenderer(
+                        videoTrack = activeLocalTrack,
+                        modifier = Modifier.fillMaxSize(),
+                        mirror = useFrontCamera
+                    )
+                } else {
+                    RealCameraXPreview(
+                        modifier = Modifier.fillMaxSize(),
+                        useFrontCamera = useFrontCamera,
+                        enableQrAnalysis = false
+                    )
+                }
             }
         } else {
             // Screen 14: Voice Call Screen Centered Avatar
@@ -1746,7 +1818,14 @@ private fun WhatsAppActiveCallScreen(
         ) {
             // Button 1: Speaker (Audio Call) or Switch Camera (Video Call)
             IconButton(
-                onClick = { isSpeakerOn = !isSpeakerOn },
+                onClick = {
+                    if (callMode == "VIDEO") {
+                        useFrontCamera = !useFrontCamera
+                        WebRtcHardwareController.switchCamera()
+                    } else {
+                        isSpeakerOn = !isSpeakerOn
+                    }
+                },
                 modifier = Modifier
                     .size(52.dp)
                     .clip(CircleShape)
