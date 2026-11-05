@@ -21,3 +21,5 @@ debug.keystore
 !debug.keystore.base64
 !gradle/wrapper/gradle-wrapper.jar
 *-debug.log
+.aistudio
+.build-outputs

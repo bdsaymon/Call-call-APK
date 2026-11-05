@@ -77,7 +77,7 @@ Production-grade native Android messaging and real-time communication applicatio
 | **JDK Version** | **Java 21** (Temurin / OpenJDK 21 required for AGP 9.1.1 & Gradle 9.3.1; bytecode target `JavaVersion.VERSION_11`) |
 | **Gradle Wrapper** | **Gradle 9.3.1** (`gradle/wrapper/gradle-wrapper.properties`) |
 | **Android Gradle Plugin (AGP)** | **9.1.1** (`gradle/libs.versions.toml`) |
-| **Kotlin Version** | **2.2.10** with KSP **2.3.5** |
+| **Kotlin Version** | **2.2.10** with KSP **2.3.6** |
 | **compileSdk** | **API 36 (minorApiLevel = 1)** (`platforms;android-36.1`) |
 | **targetSdk** | **36** |
 | **minSdk** | **24** (Android 7.0+) |
@@ -93,29 +93,63 @@ sdkmanager "platform-tools" "build-tools;36.0.0" "platforms;android-36" "platfor
 
 ## 3. Automated APK Generation via GitHub Actions (`.github/workflows/android.yml`)
 
-The workflow at `.github/workflows/android.yml` runs automatically on every `push` and `pull_request` to `main`, `master`, or `develop`, and supports manual execution via `workflow_dispatch`.
+The workflow at `.github/workflows/android.yml` runs automatically on every `push` and `pull_request` to `main`, `master`, or `develop`, whenever a version tag (`v*`) is pushed, and supports manual execution via `workflow_dispatch`.
 
 ### What the Workflow Does
 1. **Ubuntu Runner & Toolchain Setup**: Provisions `ubuntu-latest`, installs **Temurin JDK 21**, sets up the **Android SDK** (`platforms;android-36.1`, `build-tools;36.0.0`), and enables Gradle dependency caching.
-2. **Unit & Robolectric Tests**: Executes `:app:testDebugUnitTest` in headless mode.
-3. **Automated Debug APK Build**:
+2. **Environment & Secrets Setup**:
+   - Prepares `.env` from `.env.example` or GitHub Secret `ENV_FILE`.
+   - Optionally injects custom `google-services.json` from `GOOGLE_SERVICES_JSON_BASE64` if provided.
    - Restores `debug.keystore` from `debug.keystore.base64` (or generates a standard debug key).
+3. **Unit & Robolectric Tests**: Executes `:app:testDebugUnitTest` in headless mode.
+4. **Automated Debug APK Build**:
    - Runs `./gradlew :app:assembleDebug --no-daemon`.
    - Uploads `app/build/outputs/apk/debug/app-debug.apk` as the **`NeoTactile-debug-apk`** workflow artifact.
-4. **Automated Release APK Build**:
+5. **Automated Release APK Build**:
    - Uses GitHub Repository Secrets (`RELEASE_KEYSTORE_BASE64`, `STORE_PASSWORD`, `KEY_PASSWORD`) if configured; otherwise generates an ephemeral CI signing keystore (alias `upload`) so Release APK builds succeed out-of-the-box without committing private keys.
    - Runs `./gradlew :app:assembleRelease --no-daemon`.
    - Uploads `app/build/outputs/apk/release/app-release.apk` as the **`NeoTactile-release-apk`** workflow artifact.
-   - Deletes all temporary keystore files in an `always()` cleanup step.
+6. **Automatic GitHub Releases Publication**:
+   - Whenever you push a Git tag like `v1.0.0`, GitHub Actions automatically creates a **GitHub Release** and attaches both `app-debug.apk` and `app-release.apk` directly to the release page.
+
+### How to Download & Install the APK
+
+#### Option 1: Download from GitHub Actions Run Artifacts (Every Commit)
+1. Go to your GitHub repository in your browser.
+2. Click on the **Actions** tab.
+3. Click on the latest workflow run (e.g., "Android CI - Debug & Release APK Build").
+4. Scroll down to the **Artifacts** section at the bottom of the summary page.
+5. Click **`NeoTactile-debug-apk`** to download the ZIP file containing `app-debug.apk`.
+6. Unzip and copy `app-debug.apk` to your Android phone.
+
+#### Option 2: Download from GitHub Releases (Tagged Versions)
+1. Push a release tag from your computer:
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+2. In your GitHub repository, click on **Releases** (on the right sidebar).
+3. Under the release assets, directly tap or download `app-debug.apk` or `app-release.apk`.
+
+#### Installing on Android Device
+1. Transfer the `.apk` file to your Android device (via USB, Google Drive, WhatsApp, or direct browser download).
+2. Tap the downloaded APK file.
+3. If prompted with *"For your security, your phone is not allowed to install unknown apps from this source"*, tap **Settings** and turn on **Allow from this source**.
+4. Tap **Install**.
+5. Once installed, tap **Open**. Grant Camera, Microphone, and Notification permissions when prompted.
+
+---
 
 ### Configuring Production Release Signing Secrets in GitHub (Optional)
 Never commit `.jks` or `.keystore` files to Git. To sign Release APKs with your own production upload key in GitHub Actions, navigate to **GitHub Repository → Settings → Secrets and variables → Actions** and add:
 
-| GitHub Secret Name | Description |
-| :--- | :--- |
-| `RELEASE_KEYSTORE_BASE64` | Base64 string of your upload keystore (`base64 -w 0 my-upload-key.jks`) containing key alias `upload` |
-| `STORE_PASSWORD` | Keystore password for `my-upload-key.jks` |
-| `KEY_PASSWORD` | Key password for the `upload` key alias |
+| GitHub Secret Name | Description | Required? |
+| :--- | :--- | :--- |
+| `RELEASE_KEYSTORE_BASE64` | Base64 string of your upload keystore (`base64 -w 0 my-upload-key.jks`) containing key alias `upload` | Optional (CI generates ephemeral key if omitted) |
+| `STORE_PASSWORD` | Keystore password for `my-upload-key.jks` | Optional |
+| `KEY_PASSWORD` | Key password for the `upload` key alias | Optional |
+| `GOOGLE_SERVICES_JSON_BASE64` | Base64 string of custom `google-services.json` if using custom Firebase project | Optional |
+| `ENV_FILE` | Custom `.env` content with API keys if needed | Optional |
 
 ---
 

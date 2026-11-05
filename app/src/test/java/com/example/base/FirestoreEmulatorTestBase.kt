@@ -32,12 +32,15 @@ abstract class FirestoreEmulatorTestBase {
 
     @Before
     open fun setUpFirebase() {
+        val isEmulatorRunning = isPortReachable(EMULATOR_HOST, FIRESTORE_PORT) && isPortReachable(EMULATOR_HOST, AUTH_PORT)
+        org.junit.Assume.assumeTrue("Firebase Firestore & Auth emulators must be running on 8085 & 9099 to run rules tests", isEmulatorRunning)
+
         val context = ApplicationProvider.getApplicationContext<Context>()
         val resId = context.resources.getIdentifier("firestore_database_id", "string", context.packageName)
         databaseId = if (resId != 0) context.getString(resId) else "demo-database"
 
         val app = if (FirebaseApp.getApps(context).isEmpty()) {
-            val newApp = FirebaseApp.initializeApp(
+            FirebaseApp.initializeApp(
                 context,
                 FirebaseOptions.Builder()
                     .setApplicationId("com.example.neotactile")
@@ -45,26 +48,38 @@ abstract class FirestoreEmulatorTestBase {
                     .setApiKey("fake-api-key-for-emulator")
                     .build()
             )
-            val newFirestore = FirebaseFirestore.getInstance(newApp, databaseId)
-            newFirestore.useEmulator(EMULATOR_HOST, FIRESTORE_PORT)
-            newFirestore.firestoreSettings = FirebaseFirestoreSettings.Builder()
-                .setLocalCacheSettings(MemoryCacheSettings.newBuilder().build())
-                .build()
-
-            val newAuth = FirebaseAuth.getInstance(newApp)
-            newAuth.useEmulator(EMULATOR_HOST, AUTH_PORT)
-            newApp
         } else {
             FirebaseApp.getInstance()
         }
 
         firestore = FirebaseFirestore.getInstance(app, databaseId)
+        runCatching { firestore.useEmulator(EMULATOR_HOST, FIRESTORE_PORT) }
+        runCatching {
+            firestore.firestoreSettings = FirebaseFirestoreSettings.Builder()
+                .setLocalCacheSettings(MemoryCacheSettings.newBuilder().build())
+                .build()
+        }
+
         auth = FirebaseAuth.getInstance(app)
+        runCatching { auth.useEmulator(EMULATOR_HOST, AUTH_PORT) }
+    }
+
+    private fun isPortReachable(host: String, port: Int): Boolean {
+        return try {
+            java.net.Socket().use { socket ->
+                socket.connect(java.net.InetSocketAddress(host, port), 500)
+                true
+            }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     @After
     open fun tearDownFirebase() {
-        auth.signOut()
+        if (::auth.isInitialized) {
+            auth.signOut()
+        }
     }
 
     protected suspend fun signInTestUser(email: String): String = withContext(Dispatchers.IO) {
