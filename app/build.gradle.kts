@@ -73,7 +73,10 @@ android {
 
 tasks.withType<Test> {
   failFast = true
-  timeout.set(Duration.ofMinutes(2))
+  // CI runners start with a cold cache: resolving the test classpath and
+  // fetching Robolectric's ~110MB android-all-instrumented jar can easily
+  // exceed the previous 2-minute limit and fail the whole build.
+  timeout.set(Duration.ofMinutes(15))
   systemProperty("java.awt.headless", "true")
   val localRobolectricDir =
       file("/home/appuser/.m2/repository/org/robolectric/android-all-instrumented/16-robolectric-13921718-i7")
