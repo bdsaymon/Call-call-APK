@@ -30,6 +30,11 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The legacy 'tools' package no longer exists in Google's SDK
+          # repository and makes sdkmanager exit 1, failing the whole job.
+          # Only install packages that are actually published.
+          packages: 'platform-tools'
 
       - name: Accept Android SDK Licenses & Install API 36.1 / Build-Tools
         run: |
