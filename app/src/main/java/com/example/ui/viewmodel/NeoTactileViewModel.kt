@@ -47,7 +47,7 @@ class NeoTactileViewModel(
     private val _appLanguage = MutableStateFlow(AppLanguage.BILINGUAL)
     val appLanguage: StateFlow<AppLanguage> = _appLanguage.asStateFlow()
 
-    private val _isLightTheme = MutableStateFlow(false)
+    private val _isLightTheme = MutableStateFlow(true)
     val isLightTheme: StateFlow<Boolean> = _isLightTheme.asStateFlow()
 
     private val _selectedPeerId = MutableStateFlow("")

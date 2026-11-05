@@ -248,7 +248,8 @@ data class ResolvedContactProfile(
     val isArchived: Boolean = false,
     val isBlocked: Boolean = false,
     val unreadCount: Int = 0,
-    val lastSeenTimestamp: Long? = null
+    val lastSeenTimestamp: Long? = null,
+    val isTyping: Boolean = false
 ) {
     val effectiveDisplayName: String
         get() = overriddenDisplayName?.takeIf { it.isNotBlank() } ?: originalDisplayName

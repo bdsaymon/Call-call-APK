@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,39 +17,36 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,34 +57,36 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.data.model.AppLanguage
 import com.example.data.model.CommunityModel
 import com.example.data.model.ResolvedContactProfile
 import com.example.data.model.UserProfile
 import com.example.data.model.generateShortCode
-import com.example.ui.components.GlowingCyanRingBox
 import com.example.ui.components.NeoTactilePillButton
 import com.example.ui.components.NeoTactileQrCodeView
-import com.example.ui.components.frostedGlassCard
-import com.example.ui.theme.ElectricBlue
-import com.example.ui.theme.GlowingCyan
-import com.example.ui.theme.TactileAmber
+import com.example.ui.theme.LightBackgroundWhite
+import com.example.ui.theme.LightDividerGray
+import com.example.ui.theme.LightSurfaceSecondary
+import com.example.ui.theme.LightTextMuted
+import com.example.ui.theme.LightTextPrimary
+import com.example.ui.theme.LightTextSecondary
 import com.example.ui.theme.TactileCrimson
-import com.example.ui.theme.TactileEmerald
-import com.example.ui.theme.TextMuted
-import com.example.ui.theme.TextPrimary
-import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.WhatsAppAccentGreen
+import com.example.ui.theme.WhatsAppActionGreen
+import com.example.ui.theme.WhatsAppDarkGreen
+import com.example.ui.theme.WhatsAppHeaderGreen
 
-private val AVATAR_PRESETS = listOf(
-    "preset://avatar_emerald" to ("Emerald Green" to TactileEmerald),
-    "preset://avatar_cyan" to ("Teal Pulse" to GlowingCyan),
-    "preset://avatar_electric" to ("Deep Green" to ElectricBlue),
-    "preset://avatar_amber" to ("Amber Gold" to TactileAmber),
-    "preset://avatar_crimson" to ("Crimson Rose" to TactileCrimson),
-    "preset://avatar_purple" to ("Royal Violet" to Color(0xFFB388FF))
-)
-
+/**
+ * Implements:
+ * - Screen 10: Communities (Main Page)
+ * - Screen 11: Community Info
+ * - Screen 12: Create Community
+ * - Plus Real User Directory (Add by @username, email, phone, Short ID, QR Code, or New Group)
+ */
 @Composable
 fun UsersDirectoryScreen(
     language: AppLanguage,
@@ -107,1483 +107,981 @@ fun UsersDirectoryScreen(
     onClearLocalAlias: (id: String) -> Unit,
     onSelectContactForChat: (String) -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: My Contacts, 1: Search & Add Users, 2: Communities & Groups
+    var activeSubScreen by remember { mutableStateOf("MAIN") } // "MAIN", "CREATE_COMMUNITY", "COMMUNITY_INFO"
+    var selectedCommunity by remember { mutableStateOf<CommunityModel?>(null) }
     var showAddContactDialog by remember { mutableStateOf(false) }
     var showCreateGroupDialog by remember { mutableStateOf(false) }
-    var showCreateCommunityDialog by remember { mutableStateOf(false) }
     var showMyQrDialog by remember { mutableStateOf(false) }
-    var aliasTargetContact by remember { mutableStateOf<ResolvedContactProfile?>(null) }
-    var detailTargetContact by remember { mutableStateOf<ResolvedContactProfile?>(null) }
 
     val myShortCode = remember(currentUserId) { generateShortCode(currentUserId) }
 
-    val directContacts = remember(contacts, searchQuery) {
-        val base = contacts.filter { !it.isGroup }
-        if (searchQuery.isBlank()) base else base.filter {
-            it.effectiveDisplayName.contains(searchQuery, ignoreCase = true) ||
-                it.username.contains(searchQuery, ignoreCase = true) ||
-                it.phoneNumber.contains(searchQuery, ignoreCase = true) ||
-                it.email.contains(searchQuery, ignoreCase = true) ||
-                it.userId.contains(searchQuery, ignoreCase = true) ||
-                it.shortCode.contains(searchQuery, ignoreCase = true) ||
-                it.roleTag.contains(searchQuery, ignoreCase = true)
-        }
-    }
-
-    val groupContacts = remember(contacts, searchQuery) {
-        val base = contacts.filter { it.isGroup }
-        if (searchQuery.isBlank()) base else base.filter {
-            it.effectiveDisplayName.contains(searchQuery, ignoreCase = true) ||
-                it.roleTag.contains(searchQuery, ignoreCase = true)
-        }
-    }
-
-    // Strict No-Demo Policy: Only real registered users from Firestore `/users` collection
-    val realDiscoverableUsers = remember(discoverableUsers, currentUserId, searchQuery) {
-        val base = discoverableUsers.filter { it.uid != currentUserId }
-        if (searchQuery.isBlank()) {
-            base
-        } else {
-            base.filter { u ->
-                u.displayName.contains(searchQuery, ignoreCase = true) ||
-                    u.username.contains(searchQuery, ignoreCase = true) ||
-                    u.phoneNumber.contains(searchQuery, ignoreCase = true) ||
-                    u.email.contains(searchQuery, ignoreCase = true) ||
-                    u.uid.contains(searchQuery, ignoreCase = true) ||
-                    u.shortCode.contains(searchQuery, ignoreCase = true)
+    // Screen 12: Create Community Full Screen
+    if (activeSubScreen == "CREATE_COMMUNITY") {
+        BackHandler { activeSubScreen = "MAIN" }
+        WhatsAppCreateCommunityScreen(
+            onBack = { activeSubScreen = "MAIN" },
+            onCreate = { name, desc ->
+                onCreateCommunity(
+                    name,
+                    desc,
+                    "Welcome to $name!",
+                    listOf("$name General", "$name Updates"),
+                    contacts.map { it.userId }
+                )
+                activeSubScreen = "MAIN"
             }
-        }
+        )
+        return
     }
 
-    Column(
+    // Screen 11: Community Info Full Screen
+    val commInfo = selectedCommunity
+    if (activeSubScreen == "COMMUNITY_INFO" && commInfo != null) {
+        BackHandler { activeSubScreen = "MAIN" }
+        WhatsAppCommunityInfoScreen(
+            community = commInfo,
+            contacts = contacts,
+            onBack = { activeSubScreen = "MAIN" },
+            onSelectGroupChat = onSelectContactForChat,
+            onAddGroup = { showCreateGroupDialog = true },
+            onAddMembers = { showAddContactDialog = true },
+            onSendAnnouncement = { text -> onPostAnnouncement(commInfo.communityId, text) }
+        )
+        return
+    }
+
+    // Screen 10: Communities (Main) + Contacts & User Addition Hub
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .testTag("users_directory_screen")
+            .background(LightSurfaceSecondary)
+            .testTag("users_directory_screen"),
+        contentPadding = PaddingValues(bottom = 88.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp),
-            contentPadding = PaddingValues(vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // 1. Header Card: My Short ID, QR Code, + Add User, + Group, + Community
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .frostedGlassCard(cornerRadius = 24.dp, accentGlow = GlowingCyan)
-                        .padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = language.tr("ইউজার ম্যানেজমেন্ট ও কমিউনিটি", "USERS, GROUPS & COMMUNITIES"),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = TextPrimary
-                            )
-                            Text(
-                                text = language.tr(
-                                    "আপনার আইডি: $myShortCode (কোনো ডেমো প্রোফাইল নেই)",
-                                    "My ID: $myShortCode • 100% Real Users"
-                                ),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = GlowingCyan,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(Color(0xFF132920))
-                                .border(1.dp, GlowingCyan.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
-                                .clickable { showMyQrDialog = true }
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
-                                .testTag("open_my_qr_button"),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.QrCode2,
-                                contentDescription = "My QR Code",
-                                tint = GlowingCyan,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = language.shortTr("আমার QR", "My QR"),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = GlowingCyan
-                            )
-                        }
-                    }
-
-                    // Action Buttons: + Add User | + New Group | + Community
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        NeoTactilePillButton(
-                            text = language.shortTr("+ ইউজার অ্যাড", "+ Add User"),
-                            icon = Icons.Default.PersonAdd,
-                            onClick = { showAddContactDialog = true },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("add_contact_top_button")
-                        )
-                        NeoTactilePillButton(
-                            text = language.shortTr("+ গ্রুপ তৈরি", "+ Group"),
-                            icon = Icons.Default.GroupAdd,
-                            accentColor = TactileAmber,
-                            onClick = { showCreateGroupDialog = true },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("create_group_top_button")
-                        )
-                    }
-
-                    NeoTactilePillButton(
-                        text = language.tr("+ নতুন কমিউনিটি তৈরি করুন (Create Community)", "+ Create New Community"),
-                        icon = Icons.Default.Forum,
-                        accentColor = ElectricBlue,
-                        onClick = { showCreateCommunityDialog = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("create_community_top_button")
-                    )
-
-                    // Search Bar by Username, Phone, Email, or Short ID
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = onSearchQueryChange,
-                        placeholder = {
-                            Text(
-                                text = language.shortTr(
-                                    "ইউজারনেম (@name), ইমেইল, ফোন বা শর্ট আইডি ($myShortCode) দিয়ে খুঁজুন...",
-                                    "Search by @username, email, phone, or Short ID..."
-                                ),
-                                color = TextMuted
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "Search Users",
-                                tint = GlowingCyan
-                            )
-                        },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { onSearchQueryChange("") }) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Clear",
-                                        tint = TextSecondary
-                                    )
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = GlowingCyan,
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedContainerColor = Color(0xFF111E19),
-                            unfocusedContainerColor = Color(0xFF111E19)
-                        ),
-                        shape = RoundedCornerShape(18.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("search_peers_input")
-                    )
-
-                    // 3-Tab Selector: Contacts | Find Users | Communities & Groups
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TabPill(
-                            title = language.shortTr("কন্টাক্ট (${directContacts.size})", "Contacts (${directContacts.size})"),
-                            isSelected = selectedTab == 0,
-                            onClick = { selectedTab = 0 },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("tab_my_peers")
-                        )
-                        TabPill(
-                            title = language.shortTr("ইউজার খুঁজুন (${realDiscoverableUsers.size})", "Find (${realDiscoverableUsers.size})"),
-                            isSelected = selectedTab == 1,
-                            onClick = { selectedTab = 1 },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("tab_discover_nodes")
-                        )
-                        TabPill(
-                            title = language.shortTr("কমিউনিটি (${communities.size + groupContacts.size})", "Communities"),
-                            isSelected = selectedTab == 2,
-                            onClick = { selectedTab = 2 },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("tab_my_groups")
-                        )
-                    }
-                }
-            }
-
-            // Tab Content
-            when (selectedTab) {
-                0 -> {
-                    if (directContacts.isEmpty()) {
-                        item {
-                            EmptyPeersCard(
-                                language = language,
-                                titleBn = "আপনার কন্টাক্ট তালিকা খালি (No Contacts Yet)",
-                                subtitleBn = "কোনো ফেইক বা ডেমো ইউজার রাখা হয়নি। উপরে '+ ইউজার অ্যাড' বাটনে চাপ দিয়ে ইউজারনেম, ইমেইল, ফোন নম্বর বা শর্ট আইডি দিয়ে আসল ইউজার অ্যাড করুন।",
-                                subtitleEn = "Strict No-Demo Mode: Add real registered users by @username, email, phone number, or Short ID.",
-                                onAddClick = { showAddContactDialog = true }
-                            )
-                        }
-                    } else {
-                        items(directContacts, key = { it.userId }) { peer ->
-                            ConnectedPeerCard(
-                                language = language,
-                                peer = peer,
-                                onMessageClick = { onSelectContactForChat(peer.userId) },
-                                onEditAliasClick = { aliasTargetContact = peer },
-                                onDetailsClick = { detailTargetContact = peer },
-                                onToggleBlockClick = { onToggleBlockUser(peer.userId) },
-                                onRemoveClick = { onRemoveContact(peer.userId) }
-                            )
-                        }
-                    }
-                }
-
-                1 -> {
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = language.tr("রেজিস্টার্ড রিয়েল ইউজার তালিকা", "REGISTERED REAL USERS"),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = GlowingCyan,
-                                modifier = Modifier.padding(start = 4.dp)
-                            )
-                            Text(
-                                text = language.shortTr("+ সরাসরি আইডি দিয়ে অ্যাড", "+ Add by ID"),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = GlowingCyan,
-                                modifier = Modifier.clickable { showAddContactDialog = true }
-                            )
-                        }
-                    }
-
-                    if (realDiscoverableUsers.isEmpty()) {
-                        item {
-                            EmptyPeersCard(
-                                language = language,
-                                titleBn = "সার্চে কোনো পাবলিক ইউজার পাওয়া যায়নি",
-                                subtitleBn = "অন্যান্য ব্যবহারকারী অ্যাপে সাইন-ইন করলে এখানে দেখা যাবে, অথবা আপনি সরাসরি শর্ট আইডি / ইউজারনেম / ইমেইল দিয়ে অ্যাড করতে পারেন।",
-                                subtitleEn = "No other public accounts matched your search yet. Tap below to add by Short ID, Username, Email, or Phone.",
-                                onAddClick = { showAddContactDialog = true }
-                            )
-                        }
-                    } else {
-                        items(realDiscoverableUsers, key = { it.uid }) { user ->
-                            val isAlreadyConnected = contacts.any { it.userId == user.uid }
-                            DiscoverableRealUserCard(
-                                language = language,
-                                user = user,
-                                isAlreadyConnected = isAlreadyConnected,
-                                onConnectClick = {
-                                    onAddContact(
-                                        user.uid,
-                                        user.displayName.ifBlank { user.username },
-                                        user.photoUrl,
-                                        user.cleanBio,
-                                        null
-                                    )
-                                },
-                                onMessageClick = { onSelectContactForChat(user.uid) }
-                            )
-                        }
-                    }
-                }
-
-                else -> {
-                    // Communities Section
-                    if (communities.isNotEmpty()) {
-                        item {
-                            Text(
-                                text = language.tr("আপনার কমিউনিটিসমূহ (Communities)", "YOUR COMMUNITIES"),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = GlowingCyan
-                            )
-                        }
-                        items(communities, key = { it.communityId }) { comm ->
-                            CommunityItemCard(
-                                language = language,
-                                community = comm,
-                                onBroadcastAnnouncement = { text ->
-                                    onPostAnnouncement(comm.communityId, text)
-                                }
-                            )
-                        }
-                    }
-
-                    item {
-                        Text(
-                            text = language.tr("আপনার গ্রুপ চ্যাটসমূহ (Groups)", "YOUR GROUPS"),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = GlowingCyan
-                        )
-                    }
-
-                    if (groupContacts.isEmpty()) {
-                        item {
-                            EmptyPeersCard(
-                                language = language,
-                                titleBn = "কোনো গ্রুপ বা কমিউনিটি নেই",
-                                subtitleBn = "নতুন গ্রুপ বা একাধিক গ্রুপসহ কমিউনিটি তৈরি করুন।",
-                                subtitleEn = "Create a new group chat or a multi-group community.",
-                                onAddClick = { showCreateGroupDialog = true }
-                            )
-                        }
-                    } else {
-                        items(groupContacts, key = { it.userId }) { group ->
-                            ConnectedPeerCard(
-                                language = language,
-                                peer = group,
-                                onMessageClick = { onSelectContactForChat(group.userId) },
-                                onEditAliasClick = { aliasTargetContact = group },
-                                onDetailsClick = { detailTargetContact = group },
-                                onToggleBlockClick = {},
-                                onRemoveClick = { onRemoveContact(group.userId) }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Modal: My QR Code & Short ID
-    if (showMyQrDialog) {
-        MyQrCodeModalDialog(
-            language = language,
-            userName = currentUserName,
-            shortCode = myShortCode,
-            fullUserId = currentUserId,
-            onDismiss = { showMyQrDialog = false }
-        )
-    }
-
-    // Modal: Add New Contact by Username / Email / Phone / Short ID / UID
-    if (showAddContactDialog) {
-        AddNewContactModalDialog(
-            language = language,
-            onDismiss = { showAddContactDialog = false },
-            onConfirmAdd = { id, name, avatar, role, alias ->
-                showAddContactDialog = false
-                onAddContact(id, name, avatar, role, alias)
-            }
-        )
-    }
-
-    // Modal: Create New Group Chat
-    if (showCreateGroupDialog) {
-        CreateGroupModalDialog(
-            language = language,
-            availableContacts = contacts.filter { !it.isGroup },
-            onDismiss = { showCreateGroupDialog = false },
-            onConfirmCreate = { groupName, memberIds, desc ->
-                showCreateGroupDialog = false
-                onCreateGroup(groupName, memberIds, desc)
-            }
-        )
-    }
-
-    // Modal: Create New Community
-    if (showCreateCommunityDialog) {
-        CreateCommunityModalDialog(
-            language = language,
-            availableContacts = contacts.filter { !it.isGroup },
-            onDismiss = { showCreateCommunityDialog = false },
-            onConfirmCreate = { name, desc, announcement, groupNames, memberIds ->
-                showCreateCommunityDialog = false
-                onCreateCommunity(name, desc, announcement, groupNames, memberIds)
-            }
-        )
-    }
-
-    // Modal: Local Room Alias Override
-    if (aliasTargetContact != null) {
-        LocalAliasModalDialog(
-            language = language,
-            contact = aliasTargetContact!!,
-            onDismiss = { aliasTargetContact = null },
-            onSave = { name, avatar ->
-                onSaveLocalAlias(aliasTargetContact!!.userId, name, avatar)
-                aliasTargetContact = null
-            },
-            onClear = {
-                onClearLocalAlias(aliasTargetContact!!.userId)
-                aliasTargetContact = null
-            }
-        )
-    }
-
-    // Modal: Peer Details & QR Card
-    if (detailTargetContact != null) {
-        PeerDetailsModalDialog(
-            language = language,
-            contact = detailTargetContact!!,
-            onDismiss = { detailTargetContact = null },
-            onMessageNow = {
-                val uid = detailTargetContact!!.userId
-                detailTargetContact = null
-                onSelectContactForChat(uid)
-            },
-            onEditAlias = {
-                val c = detailTargetContact!!
-                detailTargetContact = null
-                aliasTargetContact = c
-            }
-        )
-    }
-}
-
-@Composable
-private fun CommunityItemCard(
-    language: AppLanguage,
-    community: CommunityModel,
-    onBroadcastAnnouncement: (String) -> Unit
-) {
-    var announcementInput by remember { mutableStateOf("") }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .frostedGlassCard(cornerRadius = 22.dp, accentGlow = GlowingCyan)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Default.Forum,
-                contentDescription = null,
-                tint = GlowingCyan,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = community.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = TextPrimary
-                )
-                Text(
-                    text = "${community.description} • ${community.groupIds.size} Groups",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextSecondary
-                )
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color(0xFF10241C))
-                .border(1.dp, GlowingCyan.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-                .padding(12.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Campaign,
-                    contentDescription = null,
-                    tint = GlowingCyan,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = community.announcementText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextPrimary
-                )
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = announcementInput,
-                onValueChange = { announcementInput = it },
-                placeholder = {
-                    Text(
-                        language.shortTr("নতুন কমিউনিটি ঘোষণা লিখুন...", "New community announcement..."),
-                        color = TextMuted
-                    )
-                },
-                singleLine = true,
-                modifier = Modifier.weight(1f)
-            )
-            NeoTactilePillButton(
-                text = language.shortTr("ঘোষণা", "Post"),
-                onClick = {
-                    if (announcementInput.isNotBlank()) {
-                        onBroadcastAnnouncement(announcementInput.trim())
-                        announcementInput = ""
-                    }
-                }
-            )
-        }
-    }
-}
-
-@Composable
-private fun TabPill(
-    title: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(if (isSelected) ElectricBlue else Color(0xFF15251E))
-            .border(
-                width = 1.dp,
-                color = if (isSelected) GlowingCyan else Color.White.copy(alpha = 0.14f),
-                shape = RoundedCornerShape(18.dp)
-            )
-            .clickable { onClick() }
-            .padding(vertical = 10.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (isSelected) Color.White else TextSecondary,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-        )
-    }
-}
-
-@Composable
-private fun ConnectedPeerCard(
-    language: AppLanguage,
-    peer: ResolvedContactProfile,
-    onMessageClick: () -> Unit,
-    onEditAliasClick: () -> Unit,
-    onDetailsClick: () -> Unit,
-    onToggleBlockClick: () -> Unit,
-    onRemoveClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .frostedGlassCard(
-                cornerRadius = 22.dp,
-                accentGlow = if (peer.isBlocked) TactileCrimson else if (peer.isGroup) TactileAmber else ElectricBlue
-            )
-            .padding(16.dp)
-            .testTag("peer_card_${peer.userId}")
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                GlowingCyanRingBox(
-                    size = 52.dp,
-                    isActive = peer.isOnline && !peer.isBlocked,
-                    amplitude = if (peer.isOnline) 0.55f else 0.1f,
-                    ringColor = if (peer.isGroup) TactileAmber else GlowingCyan
-                ) {
-                    Icon(
-                        imageVector = if (peer.isGroup) Icons.Default.Groups else Icons.Default.Person,
-                        contentDescription = peer.effectiveDisplayName,
-                        tint = if (peer.isGroup) TactileAmber else GlowingCyan,
-                        modifier = Modifier.size(26.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = peer.effectiveDisplayName,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = TextPrimary
-                        )
-                        if (peer.isBlocked) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(TactileCrimson.copy(alpha = 0.22f))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = language.shortTr("ব্লকড", "BLOCKED"),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TactileCrimson
-                                )
-                            }
-                        } else if (peer.hasLocalOverride) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(TactileAmber.copy(alpha = 0.18f))
-                                    .border(1.dp, TactileAmber.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = language.shortTr("লোকাল নাম", "ALIAS"),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TactileAmber
-                                )
-                            }
-                        }
-                    }
-
-                    Text(
-                        text = buildString {
-                            if (peer.username.isNotBlank()) append("@${peer.username} • ")
-                            append("ID: ${peer.shortCode} • ${peer.roleTag}")
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(if (peer.isOnline && !peer.isBlocked) TactileEmerald else Color.Gray)
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+        // 1. Communities Hero Banner (Matches Reference 2 Communities & Reference 1 #10/#12)
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(LightBackgroundWhite)
+                    .padding(horizontal = 24.dp, vertical = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(ElectricBlue)
-                        .clickable { onMessageClick() }
-                        .padding(vertical = 8.dp),
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(WhatsAppAccentGreen),
                     contentAlignment = Alignment.Center
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Chat,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = language.shortTr("মেসেজ পাঠান", "Message"),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Color.White
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Groups,
+                        contentDescription = "Communities",
+                        tint = Color.White,
+                        modifier = Modifier.size(42.dp)
+                    )
                 }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "Communities",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = LightTextPrimary
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "Bring together related groups for easier management.",
+                    fontSize = 14.sp,
+                    color = LightTextSecondary,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0xFF15251E))
-                        .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(16.dp))
-                        .clickable { onEditAliasClick() }
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(WhatsAppActionGreen)
+                        .clickable { activeSubScreen = "CREATE_COMMUNITY" }
+                        .testTag("create_community_top_button"),
                     contentAlignment = Alignment.Center
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit Local Alias",
-                            tint = GlowingCyan,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = language.shortTr("নাম", "Alias"),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = GlowingCyan
-                        )
-                    }
-                }
-
-                if (!peer.isGroup) {
-                    IconButton(
-                        onClick = onToggleBlockClick,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFF23181C))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Block,
-                            contentDescription = "Block or Unblock User",
-                            tint = if (peer.isBlocked) TactileCrimson else TextSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-
-                IconButton(
-                    onClick = onDetailsClick,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF15251E))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = "Details & QR",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-
-                IconButton(
-                    onClick = onRemoveClick,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF26191E))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "Remove Contact",
-                        tint = TactileCrimson,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DiscoverableRealUserCard(
-    language: AppLanguage,
-    user: UserProfile,
-    isAlreadyConnected: Boolean,
-    onConnectClick: () -> Unit,
-    onMessageClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .frostedGlassCard(cornerRadius = 22.dp)
-            .padding(16.dp)
-            .testTag("discover_node_${user.uid}")
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            GlowingCyanRingBox(
-                size = 50.dp,
-                isActive = user.isOnline,
-                amplitude = if (user.isOnline) 0.5f else 0.1f,
-                ringColor = if (user.isOnline) GlowingCyan else Color.Gray.copy(alpha = 0.3f)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = user.displayName,
-                    tint = GlowingCyan,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = user.displayName.ifBlank { user.username },
-                    style = MaterialTheme.typography.titleMedium,
-                    color = TextPrimary
-                )
-                Text(
-                    text = "@${user.username} • Short ID: ${user.shortCode}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = GlowingCyan
-                )
-                Text(
-                    text = user.cleanBio,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextSecondary
-                )
-            }
-
-            if (isAlreadyConnected) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0xFF142426))
-                        .border(1.dp, TactileEmerald.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-                        .clickable { onMessageClick() }
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = TactileEmerald,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = language.shortTr("যুক্ত", "Added"),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TactileEmerald
-                        )
-                    }
-                }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(ElectricBlue)
-                        .clickable { onConnectClick() }
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PersonAdd,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = language.shortTr("+ অ্যাড করুন", "+ Add"),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Color.White
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EmptyPeersCard(
-    language: AppLanguage,
-    titleBn: String = "তালিকা খালি রয়েছে",
-    subtitleBn: String = "ইউজারনেম, ইমেইল, ফোন নম্বর বা শর্ট আইডি দিয়ে নতুন ইউজার যুক্ত করুন।",
-    subtitleEn: String = "Add users by username, email, phone number, or Short ID.",
-    onAddClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .frostedGlassCard(cornerRadius = 24.dp)
-            .padding(28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Icon(
-            imageVector = Icons.Default.PersonAdd,
-            contentDescription = null,
-            tint = GlowingCyan,
-            modifier = Modifier.size(44.dp)
-        )
-        Text(
-            text = language.tr(titleBn, "NO CONTACTS YET"),
-            style = MaterialTheme.typography.titleMedium,
-            color = TextPrimary
-        )
-        Text(
-            text = language.tr(subtitleBn, subtitleEn),
-            style = MaterialTheme.typography.bodySmall,
-            color = TextSecondary
-        )
-        NeoTactilePillButton(
-            text = language.shortTr("+ ইউজার অ্যাড করুন", "+ Add Real User"),
-            icon = Icons.Default.Add,
-            onClick = onAddClick
-        )
-    }
-}
-
-@Composable
-private fun MyQrCodeModalDialog(
-    language: AppLanguage,
-    userName: String,
-    shortCode: String,
-    fullUserId: String,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF102019),
-        shape = RoundedCornerShape(28.dp),
-        title = {
-            Text(
-                text = language.tr("আমার QR কোড ও শর্ট আইডি", "MY QR CODE & SHORT ID"),
-                style = MaterialTheme.typography.titleMedium,
-                color = GlowingCyan
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                NeoTactileQrCodeView(
-                    codeData = "$shortCode|$fullUserId",
-                    size = 180.dp
-                )
-                Text(
-                    text = userName,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = TextPrimary
-                )
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF0A1611))
-                        .border(1.dp, GlowingCyan.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
                     Text(
-                        text = "SHORT ID: $shortCode",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = GlowingCyan,
-                        fontWeight = FontWeight.Bold
+                        text = "Create community",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
-                Text(
-                    text = language.tr(
-                        "অন্য ব্যবহারকারীরা এই শর্ট আইডি বা আপনার ইউজারনেম দিয়ে আপনাকে সরাসরি অ্যাড করতে পারবেন।",
-                        "Other users can enter this Short ID or your @username to add you."
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
+            }
+        }
+
+        // 2. "+ Add community", "+ Add Contact", "+ New Group", and "My QR Code" Rows
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(LightBackgroundWhite)
+            ) {
+                CommunityActionRow(
+                    icon = Icons.Default.Add,
+                    iconBg = WhatsAppActionGreen,
+                    title = "Add community",
+                    subtitle = "Create a new multi-group community",
+                    onClick = { activeSubScreen = "CREATE_COMMUNITY" }
+                )
+                HorizontalDivider(color = LightDividerGray, thickness = 0.6.dp)
+                CommunityActionRow(
+                    icon = Icons.Default.PersonAdd,
+                    iconBg = WhatsAppHeaderGreen,
+                    title = language.tr("নতুন কন্টাক্ট / ইউজার অ্যাড করুন (Add Contact)", "Add New Contact / User"),
+                    subtitle = "Add by @username, email, phone, or Short ID ($myShortCode)",
+                    onClick = { showAddContactDialog = true },
+                    testTag = "add_contact_top_button"
+                )
+                HorizontalDivider(color = LightDividerGray, thickness = 0.6.dp)
+                CommunityActionRow(
+                    icon = Icons.Default.GroupAdd,
+                    iconBg = WhatsAppHeaderGreen,
+                    title = language.tr("নতুন গ্রুপ তৈরি করুন (New Group)", "New Group Chat"),
+                    subtitle = "Create a group conversation with your contacts",
+                    onClick = { showCreateGroupDialog = true },
+                    testTag = "create_group_top_button"
+                )
+                HorizontalDivider(color = LightDividerGray, thickness = 0.6.dp)
+                CommunityActionRow(
+                    icon = Icons.Default.QrCode2,
+                    iconBg = WhatsAppActionGreen,
+                    title = "My QR Code ($myShortCode)",
+                    subtitle = "Share your QR code or Short ID with friends",
+                    onClick = { showMyQrDialog = true },
+                    testTag = "open_my_qr_button"
                 )
             }
-        },
-        confirmButton = {
-            NeoTactilePillButton(
-                text = language.shortTr("বন্ধ করুন", "Done"),
-                onClick = onDismiss,
-                accentColor = ElectricBlue
-            )
         }
-    )
-}
 
-@Composable
-private fun AddNewContactModalDialog(
-    language: AppLanguage,
-    onDismiss: () -> Unit,
-    onConfirmAdd: (id: String, name: String, avatar: String, role: String, alias: String?) -> Unit
-) {
-    var nodeId by remember { mutableStateOf("") }
-    var displayName by remember { mutableStateOf("") }
-    var roleTag by remember { mutableStateOf("ভেরিফাইড কন্টাক্ট (Verified Contact)") }
-    var localAlias by remember { mutableStateOf("") }
-    var selectedAvatarPreset by remember { mutableStateOf(AVATAR_PRESETS.first().first) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF102019),
-        shape = RoundedCornerShape(28.dp),
-        title = {
-            Text(
-                text = language.tr("নতুন ইউজার অ্যাড করুন", "ADD USER TO CONTACTS"),
-                style = MaterialTheme.typography.titleMedium,
-                color = GlowingCyan
-            )
-        },
-        text = {
+        // 3. Your Communities List (Matches Screen 10 of Reference 1 & Reference 2)
+        item {
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(LightBackgroundWhite)
+                    .padding(vertical = 8.dp)
             ) {
-                OutlinedTextField(
-                    value = nodeId,
-                    onValueChange = { nodeId = it },
-                    label = {
-                        Text(
-                            language.shortTr(
-                                "ইউজারনেম (@username), ইমেইল, ফোন বা শর্ট আইডি",
-                                "Username, Email, Phone, or Short ID"
-                            )
-                        )
-                    },
-                    placeholder = { Text("e.g. @rahim, user@gmail.com, +8801..., or NT-4821", color = TextMuted) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GlowingCyan,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("add_contact_node_id_input")
-                )
-
-                OutlinedTextField(
-                    value = displayName,
-                    onValueChange = { displayName = it },
-                    label = { Text(language.shortTr("ইউজার নাম (Display Name)", "Display Name")) },
-                    placeholder = { Text("e.g. Rahim Uddin", color = TextMuted) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GlowingCyan,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("add_contact_name_input")
-                )
-
-                OutlinedTextField(
-                    value = roleTag,
-                    onValueChange = { roleTag = it },
-                    label = { Text(language.shortTr("পরিচয় বা নোট", "Role / Note")) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GlowingCyan,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = localAlias,
-                    onValueChange = { localAlias = it },
-                    label = { Text(language.shortTr("গোপন লোকাল নাম (ঐচ্ছিক)", "Private Local Alias (Optional)")) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GlowingCyan,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(AVATAR_PRESETS) { (presetUri, meta) ->
-                        val (_, color) = meta
-                        val isSelected = selectedAvatarPreset == presetUri
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(color)
-                                .border(
-                                    width = if (isSelected) 3.dp else 1.dp,
-                                    color = if (isSelected) Color.White else Color.Transparent,
-                                    shape = CircleShape
-                                )
-                                .clickable { selectedAvatarPreset = presetUri }
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            NeoTactilePillButton(
-                text = language.shortTr("অ্যাড করুন", "Add User"),
-                onClick = {
-                    val effectiveName = displayName.trim().ifBlank { nodeId.trim().removePrefix("@") }
-                    onConfirmAdd(nodeId, effectiveName, selectedAvatarPreset, roleTag, localAlias.ifBlank { null })
-                },
-                accentColor = ElectricBlue,
-                testTag = "confirm_add_contact_button"
-            )
-        },
-        dismissButton = {
-            NeoTactilePillButton(
-                text = language.shortTr("বাতিল", "Cancel"),
-                onClick = onDismiss,
-                isActive = false
-            )
-        }
-    )
-}
-
-@Composable
-private fun CreateGroupModalDialog(
-    language: AppLanguage,
-    availableContacts: List<ResolvedContactProfile>,
-    onDismiss: () -> Unit,
-    onConfirmCreate: (groupName: String, memberIds: List<String>, description: String) -> Unit
-) {
-    var groupName by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    val selectedMembers = remember { mutableStateListOf<String>() }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF102019),
-        shape = RoundedCornerShape(28.dp),
-        title = {
-            Text(
-                text = language.tr("নতুন গ্রুপ চ্যাট তৈরি করুন", "CREATE NEW GROUP CHAT"),
-                style = MaterialTheme.typography.titleMedium,
-                color = TactileAmber
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlinedTextField(
-                    value = groupName,
-                    onValueChange = { groupName = it },
-                    label = { Text(language.shortTr("গ্রুপের নাম", "Group Name")) },
-                    placeholder = { Text("e.g. Project Team", color = TextMuted) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = TactileAmber,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("create_group_name_input")
-                )
-
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text(language.shortTr("গ্রুপের বিবরণ", "Group Description")) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = TactileAmber,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
                 Text(
-                    text = language.tr("সদস্য নির্বাচন করুন:", "Select Members:"),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = GlowingCyan
+                    text = "Your communities",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = LightTextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
 
-                if (availableContacts.isEmpty()) {
+                if (communities.isEmpty()) {
                     Text(
-                        text = language.shortTr(
-                            "আপনি নিজে অ্যাডমিন হিসেবে গ্রুপ তৈরি করতে পারেন এবং পরে সদস্য যুক্ত করতে পারবেন।",
-                            "You can create the group now as admin and add members anytime."
+                        text = language.tr(
+                            "আপনার এখনো কোনো কমিউনিটি নেই। উপরে 'Create community' বাটনে ট্যাপ করে তৈরি করুন।",
+                            "No communities created yet. Tap 'Create community' above to start."
                         ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
+                        fontSize = 14.sp,
+                        color = LightTextSecondary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                     )
                 } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        availableContacts.take(6).forEach { contact ->
-                            val isChecked = selectedMembers.contains(contact.userId)
+                    communities.forEach { comm ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedCommunity = comm
+                                    activeSubScreen = "COMMUNITY_INFO"
+                                }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(WhatsAppAccentGreen),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Groups,
+                                    contentDescription = comm.name,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = comm.name,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = LightTextPrimary
+                                )
+                                Text(
+                                    text = "${comm.groupIds.size.coerceAtLeast(1)} groups",
+                                    fontSize = 13.sp,
+                                    color = LightTextSecondary
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = LightTextMuted
+                            )
+                        }
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 78.dp),
+                            color = LightDividerGray,
+                            thickness = 0.6.dp
+                        )
+                    }
+                }
+            }
+        }
+
+        // 4. Saved Contacts & Groups Section
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(LightBackgroundWhite)
+                    .padding(vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "My Contacts & Groups (${contacts.size})",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = LightTextSecondary
+                    )
+                }
+
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    placeholder = { Text("Search by username, phone, email, or ID...") },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = LightTextSecondary)
+                    },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = WhatsAppActionGreen,
+                        unfocusedBorderColor = LightDividerGray
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .testTag("directory_search_input")
+                )
+
+                contacts.forEach { contact ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelectContactForChat(contact.userId) }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        WhatsAppAvatarCircle(
+                            name = contact.effectiveDisplayName,
+                            isGroup = contact.isGroup,
+                            size = 48.dp
+                        )
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = contact.effectiveDisplayName,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = LightTextPrimary
+                            )
+                            Text(
+                                text = contact.roleTag.ifBlank { "Hey there! I am using WhatsApp." },
+                                fontSize = 13.sp,
+                                color = LightTextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        IconButton(onClick = { onSelectContactForChat(contact.userId) }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Chat,
+                                contentDescription = "Open Chat",
+                                tint = WhatsAppHeaderGreen
+                            )
+                        }
+                        IconButton(onClick = { onToggleBlockUser(contact.userId) }) {
+                            Icon(
+                                imageVector = Icons.Default.Block,
+                                contentDescription = "Block / Unblock",
+                                tint = if (contact.isBlocked) TactileCrimson else LightTextMuted
+                            )
+                        }
+                        IconButton(onClick = { onRemoveContact(contact.userId) }) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = "Remove Contact",
+                                tint = LightTextMuted
+                            )
+                        }
+                    }
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 78.dp),
+                        color = LightDividerGray,
+                        thickness = 0.6.dp
+                    )
+                }
+
+                // Real Registered Users Discovered from Firestore `/users`
+                val discoverableFiltered = discoverableUsers.filter { it.uid != currentUserId }
+                if (discoverableFiltered.isNotEmpty()) {
+                    Text(
+                        text = "Discoverable Registered Users",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = WhatsAppHeaderGreen,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    discoverableFiltered.forEach { user ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            WhatsAppAvatarCircle(name = user.displayName, size = 44.dp)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = user.displayName,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = LightTextPrimary
+                                )
+                                Text(
+                                    text = "@${user.username} • ${user.shortCode}",
+                                    fontSize = 12.sp,
+                                    color = LightTextSecondary
+                                )
+                            }
+                            NeoTactilePillButton(
+                                text = "+ Add",
+                                onClick = {
+                                    onAddContact(user.uid, user.displayName, user.photoUrl, user.cleanBio, null)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Add New Contact Dialog
+    if (showAddContactDialog) {
+        var userIdentifier by remember { mutableStateOf("") }
+        var contactDisplayName by remember { mutableStateOf("") }
+        var contactPhoneOrBio by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showAddContactDialog = false },
+            title = { Text("Add New Contact") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = userIdentifier,
+                        onValueChange = { userIdentifier = it },
+                        label = { Text("Username, Email, Phone, or Short ID") },
+                        placeholder = { Text("@sadia or NT-XXXX or +8801...") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("dialog_user_id_input")
+                    )
+                    OutlinedTextField(
+                        value = contactDisplayName,
+                        onValueChange = { contactDisplayName = it },
+                        label = { Text("Display Name") },
+                        placeholder = { Text("Sadia / Rafi Ahmed") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("dialog_display_name_input")
+                    )
+                    OutlinedTextField(
+                        value = contactPhoneOrBio,
+                        onValueChange = { contactPhoneOrBio = it },
+                        label = { Text("About / Status (Optional)") },
+                        placeholder = { Text("Hey there! I am using WhatsApp.") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (userIdentifier.isNotBlank()) {
+                            onAddContact(
+                                userIdentifier.trim(),
+                                contactDisplayName.trim().ifBlank { userIdentifier.trim() },
+                                null,
+                                contactPhoneOrBio.trim().ifBlank { "Hey there! I am using WhatsApp." },
+                                null
+                            )
+                            showAddContactDialog = false
+                        }
+                    },
+                    modifier = Modifier.testTag("dialog_confirm_add_contact")
+                ) {
+                    Text("Save Contact", color = WhatsAppActionGreen, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddContactDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Create New Group Dialog
+    if (showCreateGroupDialog) {
+        var groupName by remember { mutableStateOf("") }
+        var groupDesc by remember { mutableStateOf("") }
+        val selectedMembers = remember { mutableStateListOf<String>() }
+        AlertDialog(
+            onDismissRequest = { showCreateGroupDialog = false },
+            title = { Text("New Group") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = groupName,
+                        onValueChange = { groupName = it },
+                        label = { Text("Group Name") },
+                        placeholder = { Text("Family Group / Work Team") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("dialog_group_name_input")
+                    )
+                    OutlinedTextField(
+                        value = groupDesc,
+                        onValueChange = { groupDesc = it },
+                        label = { Text("Group Description") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (contacts.isNotEmpty()) {
+                        Text("Select participants:", fontSize = 13.sp, color = LightTextSecondary)
+                        contacts.filter { !it.isGroup }.take(5).forEach { c ->
+                            val isChecked = c.userId in selectedMembers
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color(0xFF0E1B15))
                                     .clickable {
-                                        if (isChecked) selectedMembers.remove(contact.userId)
-                                        else selectedMembers.add(contact.userId)
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        if (isChecked) selectedMembers.remove(c.userId) else selectedMembers.add(c.userId)
+                                    },
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Checkbox(
                                     checked = isChecked,
-                                    onCheckedChange = { checked ->
-                                        if (checked) selectedMembers.add(contact.userId)
-                                        else selectedMembers.remove(contact.userId)
+                                    onCheckedChange = {
+                                        if (it) selectedMembers.add(c.userId) else selectedMembers.remove(c.userId)
                                     },
-                                    colors = CheckboxDefaults.colors(checkedColor = TactileAmber)
+                                    colors = CheckboxDefaults.colors(checkedColor = WhatsAppActionGreen)
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = contact.effectiveDisplayName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = TextPrimary
-                                )
+                                Text(c.effectiveDisplayName, fontSize = 14.sp)
                             }
                         }
                     }
                 }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (groupName.isNotBlank()) {
+                            onCreateGroup(groupName.trim(), selectedMembers.toList(), groupDesc.trim())
+                            showCreateGroupDialog = false
+                        }
+                    },
+                    modifier = Modifier.testTag("dialog_confirm_create_group")
+                ) {
+                    Text("Create", color = WhatsAppActionGreen, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateGroupDialog = false }) {
+                    Text("Cancel")
+                }
             }
-        },
-        confirmButton = {
-            NeoTactilePillButton(
-                text = language.shortTr("গ্রুপ তৈরি করুন", "Create Group"),
-                onClick = { onConfirmCreate(groupName, selectedMembers.toList(), description) },
-                accentColor = TactileAmber,
-                testTag = "confirm_create_group_button"
-            )
-        },
-        dismissButton = {
-            NeoTactilePillButton(
-                text = language.shortTr("বাতিল", "Cancel"),
-                onClick = onDismiss,
-                isActive = false
-            )
-        }
-    )
+        )
+    }
+
+    // My QR Code Dialog (Matches Screen 29 of Reference 1)
+    if (showMyQrDialog) {
+        AlertDialog(
+            onDismissRequest = { showMyQrDialog = false },
+            title = { Text("QR code") },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    WhatsAppAvatarCircle(name = currentUserName, size = 56.dp)
+                    Text(currentUserName, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    NeoTactileQrCodeView(codeData = "$myShortCode|$currentUserId", size = 180.dp)
+                    Text(
+                        text = "Scan this code to start a WhatsApp chat with me.\nShort ID: $myShortCode",
+                        fontSize = 12.sp,
+                        color = LightTextSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showMyQrDialog = false }) {
+                    Text("Done", color = WhatsAppActionGreen)
+                }
+            }
+        )
+    }
 }
 
 @Composable
-private fun CreateCommunityModalDialog(
-    language: AppLanguage,
-    availableContacts: List<ResolvedContactProfile>,
-    onDismiss: () -> Unit,
-    onConfirmCreate: (name: String, desc: String, announcement: String, groupNames: List<String>, memberIds: List<String>) -> Unit
+private fun CommunityActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconBg: Color,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    testTag: String? = null
 ) {
-    var name by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var announcement by remember { mutableStateOf("স্বাগতম! এটি কমিউনিটির অফিশিয়াল ঘোষণা চ্যানেল।") }
-    var groupsCsv by remember { mutableStateOf("General Discussion, Announcements") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF102019),
-        shape = RoundedCornerShape(28.dp),
-        title = {
-            Text(
-                text = language.tr("নতুন কমিউনিটি তৈরি করুন", "CREATE NEW COMMUNITY"),
-                style = MaterialTheme.typography.titleMedium,
-                color = GlowingCyan
+    val mod = if (testTag != null) Modifier.testTag(testTag) else Modifier
+    Row(
+        modifier = mod
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(iconBg),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = Color.White,
+                modifier = Modifier.size(22.dp)
             )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = LightTextPrimary
+            )
+            Text(
+                text = subtitle,
+                fontSize = 13.sp,
+                color = LightTextSecondary
+            )
+        }
+    }
+}
+
+// ============================================================================
+// SCREEN 11: COMMUNITY INFO — Matches WhatsApp_UI_Reference_1 #11
+// ============================================================================
+@Composable
+fun WhatsAppCommunityInfoScreen(
+    community: CommunityModel,
+    contacts: List<ResolvedContactProfile>,
+    onBack: () -> Unit,
+    onSelectGroupChat: (String) -> Unit,
+    onAddGroup: () -> Unit,
+    onAddMembers: () -> Unit,
+    onSendAnnouncement: (String) -> Unit
+) {
+    var showAnnouncementDialog by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(LightSurfaceSecondary)
+            .testTag("community_info_screen")
+    ) {
+        // Green Header Bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(WhatsAppHeaderGreen)
+                .padding(horizontal = 4.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White
+                )
+            }
+            IconButton(onClick = { showAnnouncementDialog = true }) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "More",
+                    tint = Color.White
+                )
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Community Title Card + 3 Action Buttons (Add members, Search, More)
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(LightBackgroundWhite)
+                        .padding(horizontal = 20.dp, vertical = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(76.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(WhatsAppAccentGreen),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Groups,
+                            contentDescription = community.name,
+                            tint = Color.White,
+                            modifier = Modifier.size(44.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = community.name,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = LightTextPrimary
+                    )
+                    Text(
+                        text = "${community.groupIds.size.coerceAtLeast(3)} groups • ${community.memberIds.size.coerceAtLeast(12)} members",
+                        fontSize = 14.sp,
+                        color = LightTextSecondary
+                    )
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable { onAddMembers() }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PersonAdd,
+                                contentDescription = "Add members",
+                                tint = WhatsAppActionGreen
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Add members", fontSize = 12.sp, color = LightTextSecondary)
+                        }
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable { onBack() }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = WhatsAppActionGreen
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Search", fontSize = 12.sp, color = LightTextSecondary)
+                        }
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable { showAnnouncementDialog = true }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Campaign,
+                                contentDescription = "Announcement",
+                                tint = WhatsAppActionGreen
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Announce", fontSize = 12.sp, color = LightTextSecondary)
+                        }
+                    }
+                }
+            }
+
+            // Groups inside Community + "+ Add group" Row (Matches Screen 11 of Reference 1)
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(LightBackgroundWhite)
+                        .padding(vertical = 10.dp)
+                ) {
+                    Text(
+                        text = "Groups",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = LightTextSecondary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+
+                    val communityGroups = contacts.filter {
+                        it.isGroup && (it.communityId == community.communityId || it.userId in community.groupIds)
+                    }
+
+                    communityGroups.forEach { grp ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelectGroupChat(grp.userId) }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            WhatsAppAvatarCircle(name = grp.effectiveDisplayName, isGroup = true, size = 48.dp)
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = grp.effectiveDisplayName,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = LightTextPrimary
+                                )
+                                Text(
+                                    text = grp.roleTag,
+                                    fontSize = 13.sp,
+                                    color = LightTextSecondary
+                                )
+                            }
+                            Text("Today", fontSize = 12.sp, color = LightTextMuted)
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onAddGroup() }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add group",
+                            tint = WhatsAppActionGreen
+                        )
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Text(
+                            text = "Add group",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = WhatsAppActionGreen
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showAnnouncementDialog) {
+        var text by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showAnnouncementDialog = false },
+            title = { Text("Community Announcement") },
+            text = {
                 OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(language.shortTr("কমিউনিটির নাম", "Community Name")) },
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("Broadcast message to all groups") }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (text.isNotBlank()) onSendAnnouncement(text.trim())
+                        showAnnouncementDialog = false
+                    }
+                ) {
+                    Text("Send", color = WhatsAppActionGreen)
+                }
+            }
+        )
+    }
+}
+
+// ============================================================================
+// SCREEN 12: CREATE COMMUNITY — Matches WhatsApp_UI_Reference_1 #12
+// ============================================================================
+@Composable
+fun WhatsAppCreateCommunityScreen(
+    onBack: () -> Unit,
+    onCreate: (name: String, description: String) -> Unit
+) {
+    var communityName by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(LightBackgroundWhite)
+            .testTag("create_community_screen")
+    ) {
+        // Top Green Header Bar: "< Create Community"
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(WhatsAppHeaderGreen)
+                .padding(horizontal = 4.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White
+                )
+            }
+            Text(
+                text = "Create Community",
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(76.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(WhatsAppAccentGreen),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Groups,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(44.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Bring together related groups and people in one place.",
+                fontSize = 14.sp,
+                color = LightTextSecondary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Community name",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = LightTextPrimary
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = communityName,
+                    onValueChange = { communityName = it },
+                    placeholder = { Text("Enter name") },
                     singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = WhatsAppActionGreen,
+                        unfocusedBorderColor = LightDividerGray
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Description (optional)",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = LightTextPrimary
+                )
+                Spacer(modifier = Modifier.height(6.dp))
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text(language.shortTr("কমিউনিটির বিবরণ", "Community Description")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = announcement,
-                    onValueChange = { announcement = it },
-                    label = { Text(language.shortTr("প্রথম ঘোষণা (Announcement)", "Welcome Announcement")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = groupsCsv,
-                    onValueChange = { groupsCsv = it },
-                    label = { Text(language.shortTr("কমিউনিটির ভেতরের গ্রুপসমূহ (কমা দিয়ে)", "Groups inside Community (comma-separated)")) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            NeoTactilePillButton(
-                text = language.shortTr("কমিউনিটি তৈরি করুন", "Create Community"),
-                onClick = {
-                    val parsedGroups = groupsCsv.split(",").map { it.trim() }.filter { it.isNotBlank() }
-                    onConfirmCreate(
-                        name,
-                        description,
-                        announcement,
-                        parsedGroups,
-                        availableContacts.map { it.userId }
-                    )
-                },
-                accentColor = ElectricBlue
-            )
-        },
-        dismissButton = {
-            NeoTactilePillButton(
-                text = language.shortTr("বাতিল", "Cancel"),
-                onClick = onDismiss,
-                isActive = false
-            )
-        }
-    )
-}
-
-@Composable
-private fun LocalAliasModalDialog(
-    language: AppLanguage,
-    contact: ResolvedContactProfile,
-    onDismiss: () -> Unit,
-    onSave: (String?, String?) -> Unit,
-    onClear: () -> Unit
-) {
-    var aliasInput by remember(contact) { mutableStateOf(contact.overriddenDisplayName ?: "") }
-    var selectedAvatar by remember(contact) {
-        mutableStateOf(contact.overriddenAvatarUri ?: contact.originalAvatarUri ?: AVATAR_PRESETS.first().first)
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF102019),
-        shape = RoundedCornerShape(28.dp),
-        title = {
-            Text(
-                text = language.tr("গোপন লোকাল নাম (Room Local Alias)", "LOCAL DEVICE ALIAS"),
-                style = MaterialTheme.typography.titleMedium,
-                color = GlowingCyan
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = language.tr(
-                        "আসল নাম: ${contact.originalDisplayName}\nএই লোকাল নাম শুধুমাত্র আপনার ফোনে (Room DB) সেভ থাকবে।",
-                        "Original: ${contact.originalDisplayName}\nSaved strictly on your device in Room SQLite."
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
-                )
-
-                OutlinedTextField(
-                    value = aliasInput,
-                    onValueChange = { aliasInput = it },
-                    label = { Text(language.shortTr("কাস্টম লোকাল নাম", "Custom Local Alias")) },
-                    singleLine = true,
+                    placeholder = { Text("Add description") },
+                    maxLines = 3,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GlowingCyan,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
+                        focusedBorderColor = WhatsAppActionGreen,
+                        unfocusedBorderColor = LightDividerGray
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-        },
-        confirmButton = {
-            NeoTactilePillButton(
-                text = language.shortTr("সেভ করুন", "Save Alias"),
-                onClick = { onSave(aliasInput.ifBlank { null }, selectedAvatar) },
-                accentColor = ElectricBlue
-            )
-        },
-        dismissButton = {
-            NeoTactilePillButton(
-                text = language.shortTr("রিসেট", "Reset"),
-                onClick = onClear,
-                isActive = false
-            )
         }
-    )
-}
 
-@Composable
-private fun PeerDetailsModalDialog(
-    language: AppLanguage,
-    contact: ResolvedContactProfile,
-    onDismiss: () -> Unit,
-    onMessageNow: () -> Unit,
-    onEditAlias: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF102019),
-        shape = RoundedCornerShape(28.dp),
-        title = {
-            Text(
-                text = contact.effectiveDisplayName,
-                style = MaterialTheme.typography.titleLarge,
-                color = TextPrimary
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                NeoTactileQrCodeView(
-                    codeData = "${contact.shortCode}|${contact.userId}",
-                    size = 150.dp
-                )
-                Text(
-                    text = "Short ID: ${contact.shortCode}",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = GlowingCyan,
-                    fontWeight = FontWeight.Bold
-                )
-                if (contact.username.isNotBlank()) {
-                    Text(
-                        text = "Username: @${contact.username}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextPrimary
-                    )
+        // Bottom Full-Width Green "Create" Button (Matches Screen 12 of Reference 1)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+                .height(48.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(WhatsAppAccentGreen)
+                .clickable {
+                    if (communityName.isNotBlank()) {
+                        onCreate(communityName.trim(), description.trim())
+                    }
                 }
-                Text(
-                    text = contact.roleTag,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
-                )
-            }
-        },
-        confirmButton = {
-            NeoTactilePillButton(
-                text = language.shortTr("মেসেজ পাঠান", "Message"),
-                onClick = onMessageNow,
-                accentColor = ElectricBlue
-            )
-        },
-        dismissButton = {
-            NeoTactilePillButton(
-                text = language.shortTr("লোকাল নাম", "Edit Alias"),
-                onClick = onEditAlias,
-                isActive = false
+                .testTag("confirm_create_community_button"),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Create",
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
             )
         }
-    )
+    }
 }

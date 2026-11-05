@@ -1,6 +1,6 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.Image
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,31 +13,62 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.DataUsage
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Pin
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Wallpaper
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -47,35 +78,54 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.R
+import androidx.compose.ui.unit.sp
 import com.example.audio.DeviceStorageStats
 import com.example.data.model.AppLanguage
 import com.example.data.model.UserProfile
 import com.example.data.model.generateShortCode
-import com.example.ui.components.GlowingCyanRingBox
 import com.example.ui.components.NeoTactilePillButton
 import com.example.ui.components.NeoTactileQrCodeView
-import com.example.ui.components.NeoTactileToggleSwitch
-import com.example.ui.components.frostedGlassCard
-import com.example.ui.theme.ElectricBlue
-import com.example.ui.theme.GlowingCyan
-import com.example.ui.theme.TactileAmber
+import com.example.ui.theme.LightBackgroundWhite
+import com.example.ui.theme.LightDividerGray
+import com.example.ui.theme.LightSurfaceSecondary
+import com.example.ui.theme.LightTextMuted
+import com.example.ui.theme.LightTextPrimary
+import com.example.ui.theme.LightTextSecondary
 import com.example.ui.theme.TactileCrimson
-import com.example.ui.theme.TactileEmerald
-import com.example.ui.theme.TextPrimary
-import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.WhatsAppAccentGreen
+import com.example.ui.theme.WhatsAppActionGreen
+import com.example.ui.theme.WhatsAppDarkGreen
+import com.example.ui.theme.WhatsAppHeaderGreen
+
+enum class SettingsSubRoute {
+    MAIN_SETTINGS,     // Screen 18
+    PROFILE_ME,        // Screen 17
+    ACCOUNT,           // Screen 19
+    PRIVACY,           // Screen 20
+    CHATS,             // Screen 21
+    WALLPAPER,         // Screen 22
+    NOTIFICATIONS,     // Screen 23
+    STORAGE_AND_DATA,  // Screen 24
+    MANAGE_STORAGE,    // Screen 25
+    LINKED_DEVICES,    // Screen 26
+    STARRED_MESSAGES,  // Screen 27
+    BROADCAST_LISTS,   // Screen 28
+    QR_CODE,           // Screen 29
+    INVITE_FRIENDS     // Screen 30
+}
 
 @Composable
 fun ProfileScreen(
     language: AppLanguage,
     onSelectLanguage: (AppLanguage) -> Unit,
-    isLightTheme: Boolean = false,
+    isLightTheme: Boolean = true,
     onToggleLightTheme: (Boolean) -> Unit = {},
     blockedCount: Int = 0,
     deviceStorageStats: DeviceStorageStats? = null,
@@ -91,8 +141,11 @@ fun ProfileScreen(
     onUpdateProfile: (displayName: String, bio: String, isPrivate: Boolean, coverPreset: String, username: String, phone: String) -> Unit,
     onToggleBiometricGate: (Boolean) -> Unit,
     onLockNow: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    initialSubRoute: SettingsSubRoute = SettingsSubRoute.MAIN_SETTINGS
 ) {
+    var currentSubRoute by remember(initialSubRoute) { mutableStateOf(initialSubRoute) }
+
     var displayName by remember(userProfile) {
         mutableStateOf(userProfile?.displayName?.ifBlank { fallbackName } ?: fallbackName)
     }
@@ -100,234 +153,614 @@ fun ProfileScreen(
         mutableStateOf(userProfile?.username ?: fallbackName.lowercase().replace(Regex("[^a-z0-9]"), ""))
     }
     var phoneNumber by remember(userProfile) {
-        mutableStateOf(userProfile?.phoneNumber ?: "")
+        mutableStateOf(userProfile?.phoneNumber?.ifBlank { "+880 1712 345678" } ?: "+880 1712 345678")
     }
     var bio by remember(userProfile) {
-        mutableStateOf(userProfile?.cleanBio ?: "Hey there! I am using NeoTactile.")
+        mutableStateOf(userProfile?.cleanBio?.ifBlank { "Hey there! I am using WhatsApp." } ?: "Hey there! I am using WhatsApp.")
     }
     var isPrivate by remember(userProfile) {
         mutableStateOf(userProfile?.isPrivate ?: false)
     }
+
     var readReceiptsEnabled by remember { mutableStateOf(true) }
-    var notificationsEnabled by remember { mutableStateOf(true) }
-    var twoStepEnabled by remember { mutableStateOf(true) }
-    var selectedWallpaper by remember { mutableStateOf("Emerald Matrix") }
+    var enterIsSend by remember { mutableStateOf(false) }
+    var mediaVisibility by remember { mutableStateOf(true) }
+    var conversationTones by remember { mutableStateOf(true) }
+    var highPriorityNotifications by remember { mutableStateOf(true) }
+    var lessDataForCalls by remember { mutableStateOf(false) }
+    var selectedWallpaperName by remember { mutableStateOf("Default Beige Doodle") }
 
     val shortCode = remember(currentUserId) { generateShortCode(currentUserId) }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag("profile_screen_list"),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
-    ) {
-        // 1. Profile Header + Overlapping Avatar
-        item {
-            Box(
+    if (currentSubRoute != SettingsSubRoute.MAIN_SETTINGS) {
+        BackHandler {
+            currentSubRoute = when (currentSubRoute) {
+                SettingsSubRoute.WALLPAPER -> SettingsSubRoute.CHATS
+                SettingsSubRoute.MANAGE_STORAGE -> SettingsSubRoute.STORAGE_AND_DATA
+                else -> SettingsSubRoute.MAIN_SETTINGS
+            }
+        }
+    }
+
+    when (currentSubRoute) {
+        SettingsSubRoute.MAIN_SETTINGS -> {
+            // SCREEN 18: SETTINGS (MAIN) — Matches Ref_1 #18 & Ref_2 Settings
+            LazyColumn(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .frostedGlassCard(cornerRadius = 28.dp, accentGlow = ElectricBlue)
-                    .padding(bottom = 16.dp)
+                    .fillMaxSize()
+                    .background(LightBackgroundWhite)
+                    .testTag("profile_screen_list"),
+                contentPadding = PaddingValues(bottom = 88.dp)
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
+                // Top User Profile Row + Green QR Code Button
+                item {
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(136.dp)
-                            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                            .clickable { currentSubRoute = SettingsSubRoute.PROFILE_ME }
+                            .padding(horizontal = 16.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_notice_banner_art),
-                            contentDescription = "Profile Cover Banner",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
+                        WhatsAppAvatarCircle(name = displayName, size = 60.dp)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = displayName.uppercase(),
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = LightTextPrimary
+                            )
+                            Text(
+                                text = bio.ifBlank { "Available" },
+                                fontSize = 14.sp,
+                                color = LightTextSecondary
+                            )
+                            Text(
+                                text = phoneNumber,
+                                fontSize = 12.sp,
+                                color = LightTextMuted
+                            )
+                        }
+                        IconButton(
+                            onClick = { currentSubRoute = SettingsSubRoute.QR_CODE },
+                            modifier = Modifier.testTag("settings_qr_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.QrCode2,
+                                contentDescription = "QR Code",
+                                tint = WhatsAppActionGreen,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
                     }
+                    HorizontalDivider(color = LightDividerGray, thickness = 0.8.dp)
+                }
 
-                    GlowingCyanRingBox(
-                        size = 90.dp,
-                        isActive = true,
-                        amplitude = 0.45f,
-                        modifier = Modifier.offset(y = (-42).dp)
+                // Settings Menu List (Matches Reference 1 #18 & Reference 2 Settings)
+                item {
+                    WhatsAppSettingsRow(
+                        icon = Icons.Default.Key,
+                        title = "Account",
+                        subtitle = "Security notifications, change number",
+                        onClick = { currentSubRoute = SettingsSubRoute.ACCOUNT }
+                    )
+                    WhatsAppSettingsRow(
+                        icon = Icons.Default.Lock,
+                        title = "Privacy",
+                        subtitle = "Block contacts, disappearing messages",
+                        onClick = { currentSubRoute = SettingsSubRoute.PRIVACY }
+                    )
+                    WhatsAppSettingsRow(
+                        icon = Icons.Default.AccountCircle,
+                        title = "Avatar & Profile",
+                        subtitle = "Create, edit, profile photo",
+                        onClick = { currentSubRoute = SettingsSubRoute.PROFILE_ME }
+                    )
+                    WhatsAppSettingsRow(
+                        icon = Icons.AutoMirrored.Filled.Chat,
+                        title = "Chats",
+                        subtitle = "Theme, wallpapers, chat history",
+                        onClick = { currentSubRoute = SettingsSubRoute.CHATS }
+                    )
+                    WhatsAppSettingsRow(
+                        icon = Icons.Default.Notifications,
+                        title = "Notifications",
+                        subtitle = "Message, group & call tones",
+                        onClick = { currentSubRoute = SettingsSubRoute.NOTIFICATIONS }
+                    )
+                    WhatsAppSettingsRow(
+                        icon = Icons.Default.DataUsage,
+                        title = "Storage and data",
+                        subtitle = "Network usage, auto-download, mobile storage",
+                        onClick = { currentSubRoute = SettingsSubRoute.STORAGE_AND_DATA }
+                    )
+                    WhatsAppSettingsRow(
+                        icon = Icons.Default.Devices,
+                        title = "Linked devices",
+                        subtitle = "$deviceModel ($hardwareId)",
+                        onClick = { currentSubRoute = SettingsSubRoute.LINKED_DEVICES }
+                    )
+                    WhatsAppSettingsRow(
+                        icon = Icons.Default.Star,
+                        title = "Starred messages",
+                        subtitle = "View bookmarked messages",
+                        onClick = { currentSubRoute = SettingsSubRoute.STARRED_MESSAGES }
+                    )
+                    WhatsAppSettingsRow(
+                        icon = Icons.Default.Campaign,
+                        title = "Broadcast lists",
+                        subtitle = "Send messages to multiple contacts",
+                        onClick = { currentSubRoute = SettingsSubRoute.BROADCAST_LISTS }
+                    )
+                    WhatsAppSettingsRow(
+                        icon = Icons.Default.Language,
+                        title = "App language",
+                        subtitle = "${language.label} (Tap to switch)",
+                        onClick = {
+                            val next = when (language) {
+                                AppLanguage.BILINGUAL -> AppLanguage.ENGLISH
+                                AppLanguage.ENGLISH -> AppLanguage.BENGALI
+                                AppLanguage.BENGALI -> AppLanguage.BILINGUAL
+                            }
+                            onSelectLanguage(next)
+                        }
+                    )
+                    WhatsAppSettingsRow(
+                        icon = Icons.Default.PersonAdd,
+                        title = "Invite a friend",
+                        subtitle = "Share link or invite contacts",
+                        onClick = { currentSubRoute = SettingsSubRoute.INVITE_FRIENDS }
+                    )
+                }
+
+                // Quick Permissions & Mobile Storage Status Footer
+                item {
+                    HorizontalDivider(color = LightDividerGray, thickness = 0.8.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (!allPermissionsGranted) onRequestPermissions()
+                                else currentSubRoute = SettingsSubRoute.MANAGE_STORAGE
+                            }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "User Avatar",
-                            tint = GlowingCyan,
-                            modifier = Modifier.size(42.dp)
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = WhatsAppActionGreen,
+                            modifier = Modifier.size(22.dp)
                         )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (allPermissionsGranted) "All Permissions Granted ✅" else "Tap to Allow Permissions",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = LightTextPrimary
+                            )
+                            if (deviceStorageStats != null) {
+                                Text(
+                                    text = "Mobile Storage: ${deviceStorageStats.freeDeviceGb} GB Free / ${deviceStorageStats.totalDeviceGb} GB • ${deviceStorageStats.savedFilesCount} media files",
+                                    fontSize = 12.sp,
+                                    color = LightTextSecondary
+                                )
+                            }
+                        }
                     }
 
-                    Column(
+                    Row(
                         modifier = Modifier
-                            .offset(y = (-28).dp)
-                            .padding(horizontal = 20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        NeoTactilePillButton(
+                            text = "Lock App",
+                            icon = Icons.Default.Fingerprint,
+                            onClick = onLockNow,
+                            modifier = Modifier.weight(1f),
+                            testTag = "test_app_lock_button"
+                        )
+                        NeoTactilePillButton(
+                            text = "Sign Out",
+                            icon = Icons.AutoMirrored.Filled.Logout,
+                            accentColor = TactileCrimson,
+                            onClick = onSignOut,
+                            modifier = Modifier.weight(1f),
+                            testTag = "sign_out_button"
+                        )
+                    }
+                }
+            }
+        }
+
+        SettingsSubRoute.PROFILE_ME -> {
+            // SCREEN 17: PROFILE ("Me") — Matches Ref_1 #17 & Ref_2 Profile
+            WhatsAppSubScreenScaffold(
+                title = "Profile",
+                onBack = { currentSubRoute = SettingsSubRoute.MAIN_SETTINGS }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(modifier = Modifier.size(132.dp)) {
+                        WhatsAppAvatarCircle(name = displayName, size = 128.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .align(Alignment.BottomEnd)
+                                .clip(CircleShape)
+                                .background(WhatsAppActionGreen),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = displayName,
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = TextPrimary
-                            )
                             Icon(
-                                imageVector = Icons.Default.VerifiedUser,
-                                contentDescription = "Verified Account",
-                                tint = TactileEmerald,
+                                imageVector = Icons.Default.CameraAlt,
+                                contentDescription = "Change Profile Photo",
+                                tint = Color.White,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "@$username • ${userProfile?.email?.ifBlank { fallbackEmail } ?: fallbackEmail} • ID: $shortCode",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = GlowingCyan
-                        )
                     }
                 }
-            }
-        }
 
-        // 2. Permissions & Mobile Device Storage Verification Card
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .frostedGlassCard(
-                        cornerRadius = 24.dp,
-                        accentGlow = if (allPermissionsGranted) TactileEmerald else TactileAmber
-                    )
-                    .padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Storage,
-                        contentDescription = null,
-                        tint = TactileEmerald,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = language.tr(
-                            "পারমিশন ও মোবাইল স্টোরেজ স্ট্যাটাস (PERMISSIONS & MOBILE STORAGE)",
-                            "PERMISSIONS & MOBILE DEVICE STORAGE"
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    OutlinedTextField(
+                        value = displayName,
+                        onValueChange = { displayName = it },
+                        label = { Text("Name") },
+                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = WhatsAppActionGreen) },
+                        trailingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = WhatsAppActionGreen) },
+                        supportingText = {
+                            Text("This is not your username or pin. This name will be visible to your contacts.")
+                        },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = WhatsAppActionGreen,
+                            unfocusedBorderColor = LightDividerGray
                         ),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = TactileEmerald
-                    )
-                }
-
-                SettingsSummaryRow(
-                    icon = Icons.Default.CheckCircle,
-                    title = language.tr(
-                        "ক্যামেরা, মাইক্রোফোন ও নোটিফিকেশন পারমিশন",
-                        "Camera, Mic & Notification Permissions"
-                    ),
-                    value = if (allPermissionsGranted) {
-                        language.shortTr("সব পারমিশন অ্যালাউ করা আছে ✅", "All Granted ✅")
-                    } else {
-                        language.shortTr("অ্যালাউ করুন (Allow All)", "Tap to Allow")
-                    },
-                    onClick = onRequestPermissions
-                )
-
-                if (!allPermissionsGranted) {
-                    NeoTactilePillButton(
-                        text = language.tr("সমস্ত পারমিশন অ্যালাউ করুন (Allow All Permissions)", "Allow All App Permissions"),
-                        icon = Icons.Default.Security,
-                        onClick = onRequestPermissions,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("profile_request_permissions_button")
-                    )
-                }
-
-                if (deviceStorageStats != null) {
-                    SettingsSummaryRow(
-                        icon = Icons.Default.DataUsage,
-                        title = language.tr(
-                            "মোবাইল স্টোরেজ স্পেস (Available / Total)",
-                            "Mobile Storage Space (Free / Total)"
-                        ),
-                        value = "${deviceStorageStats.freeDeviceGb} GB Free / ${deviceStorageStats.totalDeviceGb} GB"
+                            .testTag("profile_display_name_input")
                     )
 
-                    SettingsSummaryRow(
-                        icon = Icons.Default.Folder,
-                        title = language.tr(
-                            "অ্যাপ মিডিয়া ও ভয়েস ফাইল (${deviceStorageStats.savedFilesCount} files)",
-                            "Saved App Media (${deviceStorageStats.savedFilesCount} files)"
+                    OutlinedTextField(
+                        value = bio,
+                        onValueChange = { bio = it },
+                        label = { Text("About") },
+                        leadingIcon = { Icon(Icons.Default.Info, contentDescription = null, tint = WhatsAppActionGreen) },
+                        trailingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = WhatsAppActionGreen) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = WhatsAppActionGreen,
+                            unfocusedBorderColor = LightDividerGray
                         ),
-                        value = "${deviceStorageStats.appMediaUsedKb} KB • NeoTactileMedia"
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("profile_bio_input")
+                    )
+
+                    OutlinedTextField(
+                        value = phoneNumber,
+                        onValueChange = { phoneNumber = it },
+                        label = { Text("Phone") },
+                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = WhatsAppActionGreen) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = WhatsAppActionGreen,
+                            unfocusedBorderColor = LightDividerGray
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = username,
+                        onValueChange = { username = it },
+                        label = { Text("Username / Links") },
+                        leadingIcon = { Icon(Icons.Default.Link, contentDescription = null, tint = WhatsAppActionGreen) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = WhatsAppActionGreen,
+                            unfocusedBorderColor = LightDividerGray
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("profile_username_input")
+                    )
+
+                    NeoTactilePillButton(
+                        text = "Save Profile",
+                        icon = Icons.Default.Save,
+                        onClick = {
+                            onUpdateProfile(
+                                displayName,
+                                bio,
+                                isPrivate,
+                                "preset://emerald_cover",
+                                username,
+                                phoneNumber
+                            )
+                            currentSubRoute = SettingsSubRoute.MAIN_SETTINGS
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        testTag = "save_profile_button"
                     )
                 }
             }
         }
 
-        // 3. Theme (Green & White Light / Dark) & Language Preferences
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .frostedGlassCard(cornerRadius = 24.dp, accentGlow = GlowingCyan)
-                    .padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+        SettingsSubRoute.ACCOUNT -> {
+            // SCREEN 19: ACCOUNT SETTINGS — Matches Ref_1 #19 & Ref_2 Account
+            WhatsAppSubScreenScaffold(
+                title = "Account",
+                onBack = { currentSubRoute = SettingsSubRoute.MAIN_SETTINGS }
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Security,
+                    title = "Security notifications",
+                    subtitle = "Show security notifications on this device",
+                    onClick = {}
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Key,
+                    title = "Passkeys",
+                    subtitle = "Use passkeys to log in more securely",
+                    onClick = {}
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Email,
+                    title = "Email address",
+                    subtitle = userProfile?.email?.ifBlank { fallbackEmail } ?: fallbackEmail,
+                    onClick = {}
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Pin,
+                    title = "Two-step verification",
+                    subtitle = "Enabled (Captcha + OTP Anti-Fake Verification)",
+                    onClick = {}
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.PhoneAndroid,
+                    title = "Change number",
+                    subtitle = phoneNumber,
+                    onClick = {}
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Description,
+                    title = "Request account info",
+                    subtitle = "Get a report of your account information",
+                    onClick = {}
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSignOut() }
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Icon(
-                        imageVector = Icons.Default.Contrast,
-                        contentDescription = null,
-                        tint = GlowingCyan,
-                        modifier = Modifier.size(20.dp)
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = "Delete account",
+                        tint = TactileCrimson
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
                     Text(
-                        text = language.tr("থিম ও অ্যাপের ভাষা (THEME & LANGUAGE)", "THEME & LANGUAGE"),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = GlowingCyan
+                        text = "Delete account / Sign out",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = TactileCrimson
+                    )
+                }
+            }
+        }
+
+        SettingsSubRoute.PRIVACY -> {
+            // SCREEN 20: PRIVACY SETTINGS — Matches Ref_1 #20 & Ref_2 Privacy
+            WhatsAppSubScreenScaffold(
+                title = "Privacy",
+                onBack = { currentSubRoute = SettingsSubRoute.MAIN_SETTINGS }
+            ) {
+                Text(
+                    text = "Who can see my personal info",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = LightTextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                )
+                WhatsAppSimpleValueRow("Last seen and online", if (isPrivate) "My contacts" else "Everyone") {
+                    isPrivate = !isPrivate
+                }
+                WhatsAppSimpleValueRow("Profile photo", if (isPrivate) "My contacts" else "Everyone") {
+                    isPrivate = !isPrivate
+                }
+                WhatsAppSimpleValueRow("About", "Everyone") {}
+                WhatsAppSimpleValueRow("Status", "My contacts") {}
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Read receipts", fontSize = 16.sp, color = LightTextPrimary)
+                        Text(
+                            "If turned off, you won't send or receive Read receipts. Read receipts are always sent for group chats.",
+                            fontSize = 13.sp,
+                            color = LightTextSecondary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Switch(
+                        checked = readReceiptsEnabled,
+                        onCheckedChange = { readReceiptsEnabled = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = WhatsAppActionGreen
+                        )
                     )
                 }
 
-                NeoTactileToggleSwitch(
-                    checked = isLightTheme,
-                    onCheckedChange = onToggleLightTheme,
-                    label = language.tr("গ্রিন ও হোয়াইট লাইট থিম", "Green & White Light Theme"),
-                    subtitle = language.tr(
-                        "হালকা সবুজ ও সাদা মেসেজিং থিম অথবা ডার্ক থিম",
-                        "Switch between Clean Green/White Light mode and Emerald Dark mode"
+                HorizontalDivider(color = LightDividerGray, thickness = 0.6.dp)
+                WhatsAppSimpleValueRow("Disappearing messages", "Off") {}
+                WhatsAppSimpleValueRow("Groups", "Everyone") {}
+                WhatsAppSimpleValueRow("Blocked contacts", "$blockedCount contacts") {}
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("App lock (Biometric / PIN)", fontSize = 16.sp, color = LightTextPrimary)
+                        Text("Require fingerprint or PIN (2026) to unlock", fontSize = 13.sp, color = LightTextSecondary)
+                    }
+                    Switch(
+                        checked = biometricGateEnabled,
+                        onCheckedChange = onToggleBiometricGate,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = WhatsAppActionGreen
+                        ),
+                        modifier = Modifier.testTag("biometric_gate_toggle")
                     )
+                }
+            }
+        }
+
+        SettingsSubRoute.CHATS -> {
+            // SCREEN 21: CHAT SETTINGS — Matches Ref_1 #21
+            WhatsAppSubScreenScaffold(
+                title = "Chats",
+                onBack = { currentSubRoute = SettingsSubRoute.MAIN_SETTINGS }
+            ) {
+                Text(
+                    text = "Display",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = LightTextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Contrast,
+                    title = "Theme",
+                    subtitle = if (isLightTheme) "Light (Green & White)" else "Dark",
+                    onClick = { onToggleLightTheme(!isLightTheme) }
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Wallpaper,
+                    title = "Wallpaper",
+                    subtitle = selectedWallpaperName,
+                    onClick = { currentSubRoute = SettingsSubRoute.WALLPAPER }
+                )
+
+                HorizontalDivider(color = LightDividerGray, thickness = 0.6.dp)
+
+                Text(
+                    text = "Chat settings",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = LightTextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                )
+
+                WhatsAppSwitchRow(
+                    title = "Enter is send",
+                    subtitle = "Enter key will send your message",
+                    checked = enterIsSend,
+                    onCheckedChange = { enterIsSend = it }
+                )
+                WhatsAppSwitchRow(
+                    title = "Media visibility",
+                    subtitle = "Show newly downloaded media in your device's gallery",
+                    checked = mediaVisibility,
+                    onCheckedChange = { mediaVisibility = it }
+                )
+                WhatsAppSimpleValueRow("Font size", "Medium") {}
+                HorizontalDivider(color = LightDividerGray, thickness = 0.6.dp)
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Backup,
+                    title = "Chat backup",
+                    subtitle = "Back up messages to cloud and device storage",
+                    onClick = {}
+                )
+            }
+        }
+
+        SettingsSubRoute.WALLPAPER -> {
+            // SCREEN 22: WALLPAPER SETTINGS — Matches Ref_1 #22
+            WhatsAppSubScreenScaffold(
+                title = "Wallpaper",
+                onBack = { currentSubRoute = SettingsSubRoute.CHATS }
+            ) {
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Image,
+                    title = "Choose from gallery",
+                    subtitle = "Pick a custom photo from mobile storage",
+                    onClick = { selectedWallpaperName = "Custom Gallery Wallpaper" }
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Palette,
+                    title = "Solid colors",
+                    subtitle = "Clean WhatsApp solid background colors",
+                    onClick = { selectedWallpaperName = "Solid Mint Green" }
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Wallpaper,
+                    title = "Default wallpaper",
+                    subtitle = "Classic WhatsApp beige doodle wallpaper",
+                    onClick = { selectedWallpaperName = "Default Beige Doodle" }
                 )
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    AppLanguage.entries.forEach { langOption ->
-                        val isSelected = language == langOption
+                    val wallpapers = listOf(
+                        "Beige Doodle" to listOf(Color(0xFFEFEAE2), Color(0xFFD9FDD3)),
+                        "Ocean Blue" to listOf(Color(0xFF38BDF8), Color(0xFF1D4ED8)),
+                        "Emerald" to listOf(Color(0xFF10B981), Color(0xFF047857)),
+                        "Sunset" to listOf(Color(0xFFF472B6), Color(0xFFDB2777))
+                    )
+                    wallpapers.forEach { (name, colors) ->
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(if (isSelected) ElectricBlue else Color(0xFF12241C))
+                                .height(130.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Brush.verticalGradient(colors))
                                 .border(
-                                    width = 1.dp,
-                                    color = if (isSelected) GlowingCyan else Color.White.copy(alpha = 0.14f),
-                                    shape = RoundedCornerShape(16.dp)
+                                    width = if (selectedWallpaperName.contains(name)) 2.5.dp else 1.dp,
+                                    color = if (selectedWallpaperName.contains(name)) WhatsAppActionGreen else LightDividerGray,
+                                    shape = RoundedCornerShape(10.dp)
                                 )
-                                .clickable { onSelectLanguage(langOption) }
-                                .padding(vertical = 10.dp),
-                            contentAlignment = Alignment.Center
+                                .clickable { selectedWallpaperName = name },
+                            contentAlignment = Alignment.BottomCenter
                         ) {
                             Text(
-                                text = langOption.label,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color.White,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                text = name,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = LightTextPrimary,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.White.copy(alpha = 0.85f))
+                                    .padding(vertical = 4.dp),
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -335,314 +768,526 @@ fun ProfileScreen(
             }
         }
 
-        // 4. My QR Code & Short ID Card
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .frostedGlassCard(cornerRadius = 24.dp)
-                    .padding(18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+        SettingsSubRoute.NOTIFICATIONS -> {
+            // SCREEN 23: NOTIFICATIONS SETTINGS — Matches Ref_1 #23 & Ref_2 Notifications
+            WhatsAppSubScreenScaffold(
+                title = "Notifications",
+                onBack = { currentSubRoute = SettingsSubRoute.MAIN_SETTINGS }
             ) {
-                NeoTactileQrCodeView(
-                    codeData = "$shortCode|$currentUserId",
-                    size = 96.dp
+                WhatsAppSwitchRow(
+                    title = "Conversation tones",
+                    subtitle = "Play sounds for incoming and outgoing messages",
+                    checked = conversationTones,
+                    onCheckedChange = { conversationTones = it }
                 )
+                HorizontalDivider(color = LightDividerGray, thickness = 0.6.dp)
+                Text(
+                    text = "Messages",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = LightTextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+                WhatsAppSimpleValueRow("Notification tone", "Default (Pixie Dust)") {}
+                WhatsAppSimpleValueRow("Vibrate", "Default") {}
+                WhatsAppSimpleValueRow("Popup notification", "Not available") {}
+                WhatsAppSimpleValueRow("Light", "White") {}
+                WhatsAppSwitchRow(
+                    title = "Use high priority notifications",
+                    subtitle = "Show previews of notifications at the top of the screen",
+                    checked = highPriorityNotifications,
+                    onCheckedChange = { highPriorityNotifications = it }
+                )
+                HorizontalDivider(color = LightDividerGray, thickness = 0.6.dp)
+                Text(
+                    text = "Groups",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = LightTextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+                WhatsAppSimpleValueRow("Notification tone", "Default (Pixie Dust)") {}
+            }
+        }
+
+        SettingsSubRoute.STORAGE_AND_DATA -> {
+            // SCREEN 24: STORAGE AND DATA — Matches Ref_1 #24 & Ref_2 Storage & Data
+            WhatsAppSubScreenScaffold(
+                title = "Storage and data",
+                onBack = { currentSubRoute = SettingsSubRoute.MAIN_SETTINGS }
+            ) {
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Folder,
+                    title = "Manage storage",
+                    subtitle = if (deviceStorageStats != null) {
+                        "${deviceStorageStats.appMediaUsedKb} KB used • ${deviceStorageStats.freeDeviceGb} GB free"
+                    } else "1.2 GB",
+                    onClick = { currentSubRoute = SettingsSubRoute.MANAGE_STORAGE }
+                )
+                HorizontalDivider(color = LightDividerGray, thickness = 0.6.dp)
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.DataUsage,
+                    title = "Network usage",
+                    subtitle = "652 MB sent • 1.2 GB received",
+                    onClick = {}
+                )
+                WhatsAppSwitchRow(
+                    title = "Use less data for calls",
+                    subtitle = "Reduce data used during a WebRTC call",
+                    checked = lessDataForCalls,
+                    onCheckedChange = { lessDataForCalls = it }
+                )
+                HorizontalDivider(color = LightDividerGray, thickness = 0.6.dp)
+                Text(
+                    text = "Media auto-download",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = LightTextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+                WhatsAppSimpleValueRow("When using mobile data", "Photos") {}
+                WhatsAppSimpleValueRow("When connected on Wi-Fi", "All media") {}
+                WhatsAppSimpleValueRow("When roaming", "No media") {}
+            }
+        }
+
+        SettingsSubRoute.MANAGE_STORAGE -> {
+            // SCREEN 25: MANAGE STORAGE — Matches Ref_1 #25
+            WhatsAppSubScreenScaffold(
+                title = "Manage storage",
+                onBack = { currentSubRoute = SettingsSubRoute.STORAGE_AND_DATA }
+            ) {
                 Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
                 ) {
-                    Text(
-                        text = language.tr("আমার কন্টাক্ট QR ও শর্ট আইডি", "MY CONTACT QR & SHORT ID"),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = GlowingCyan
-                    )
-                    Text(
-                        text = shortCode,
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = language.tr(
-                            "ইউজারনেম (@$username) বা এই শর্ট আইডি দিয়ে যে কেউ আপনাকে অ্যাড করতে পারবে।",
-                            "Others can add you by @$username or this Short ID."
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
-                }
-            }
-        }
-
-        // 5. Account, Username, Phone & Profile Details Card
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .frostedGlassCard(cornerRadius = 24.dp)
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = language.tr("অ্যাকাউন্ট, ইউজারনেম ও প্রোফাইল", "ACCOUNT, USERNAME & PROFILE"),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = GlowingCyan
-                )
-
-                OutlinedTextField(
-                    value = displayName,
-                    onValueChange = { displayName = it },
-                    label = { Text(language.shortTr("আপনার নাম (Display Name)", "Display Name")) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GlowingCyan,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("profile_display_name_input")
-                )
-
-                OutlinedTextField(
-                    value = username,
-                    onValueChange = { username = it },
-                    label = { Text(language.shortTr("ইউজারনেম (@username)", "Username (@handle)")) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GlowingCyan,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("profile_username_input")
-                )
-
-                OutlinedTextField(
-                    value = phoneNumber,
-                    onValueChange = { phoneNumber = it },
-                    label = { Text(language.shortTr("ফোন নম্বর (Phone Number)", "Registered Phone Number")) },
-                    placeholder = { Text("+8801...", color = TextSecondary) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GlowingCyan,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = bio,
-                    onValueChange = { bio = it },
-                    label = { Text(language.shortTr("আপনার বায়ো (About / Bio)", "Profile Description / Bio")) },
-                    maxLines = 3,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GlowingCyan,
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("profile_bio_input")
-                )
-
-                NeoTactileToggleSwitch(
-                    checked = isPrivate,
-                    onCheckedChange = { isPrivate = it },
-                    label = language.tr("প্রাইভেট প্রোফাইল", "Private Profile"),
-                    subtitle = language.tr(
-                        "চালু থাকলে শুধুমাত্র যুক্ত থাকা বন্ধুরা প্রোফাইল দেখতে পাবে",
-                        "Only connected contacts can view your full profile"
-                    ),
-                    testTag = "profile_private_toggle"
-                )
-
-                NeoTactilePillButton(
-                    text = language.tr("প্রোফাইল ও ইউজারনেম সেভ করুন", "Save Profile & Username"),
-                    icon = Icons.Default.Save,
-                    onClick = {
-                        onUpdateProfile(
-                            displayName,
-                            bio,
-                            isPrivate,
-                            "preset://emerald_cover",
-                            username,
-                            phoneNumber
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    testTag = "save_profile_button"
-                )
-            }
-        }
-
-        // 6. Complete Settings Organization (Chats, Wallpaper, Notifications, Storage, Privacy, Linked Devices)
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .frostedGlassCard(cornerRadius = 24.dp)
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = language.tr("সম্পূর্ণ অ্যাপ সেটিংস (ALL SETTINGS)", "COMPLETE SETTINGS"),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = GlowingCyan
-                )
-
-                NeoTactileToggleSwitch(
-                    checked = readReceiptsEnabled,
-                    onCheckedChange = { readReceiptsEnabled = it },
-                    label = language.tr("রিড রিসিপ্টস (Read Receipts)", "Read & Delivery Receipts"),
-                    subtitle = language.tr("মেসেজ দেখা হলে ব্লু/গ্রিন টিক দেখাবে", "Show double-check read indicators")
-                )
-
-                NeoTactileToggleSwitch(
-                    checked = notificationsEnabled,
-                    onCheckedChange = { notificationsEnabled = it },
-                    label = language.tr("নোটিফিকেশন ও কল অ্যালার্ট", "Push Notifications & Call Alerts"),
-                    subtitle = language.tr("নতুন মেসেজ ও ইনকামিং WebRTC কলের নোটিফিকেশন", "FCM & real-time incoming call alerts")
-                )
-
-                NeoTactileToggleSwitch(
-                    checked = twoStepEnabled,
-                    onCheckedChange = { twoStepEnabled = it },
-                    label = language.tr("টু-স্টেপ ও অ্যান্টি-ফেক ভেরিফিকেশন", "Anti-Fake & Two-Step Verification"),
-                    subtitle = language.tr("ক্যাপচা ও ওটিপি ভেরিফাইড অ্যাকাউন্ট সুরক্ষা সক্রিয়", "Captcha + OTP Anti-Fake protection enabled")
-                )
-
-                SettingsSummaryRow(
-                    icon = Icons.Default.Wallpaper,
-                    title = language.tr("চ্যাট ওয়ালপেপার (Chat Wallpaper)", "Chat Wallpaper"),
-                    value = selectedWallpaper,
-                    onClick = {
-                        selectedWallpaper = if (selectedWallpaper == "Emerald Matrix") "Clean White Mint" else "Emerald Matrix"
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("Used", fontSize = 12.sp, color = LightTextSecondary)
+                            Text(
+                                text = if (deviceStorageStats != null) "${deviceStorageStats.appMediaUsedKb} KB" else "1.2 GB",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = WhatsAppActionGreen
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("Free on Mobile", fontSize = 12.sp, color = LightTextSecondary)
+                            Text(
+                                text = "${deviceStorageStats?.freeDeviceGb ?: "25"} GB free",
+                                fontSize = 14.sp,
+                                color = LightTextSecondary
+                            )
+                        }
                     }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    LinearProgressIndicator(
+                        progress = { 0.25f },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(5.dp)),
+                        color = WhatsAppAccentGreen,
+                        trackColor = LightDividerGray
+                    )
+                }
+                HorizontalDivider(color = LightDividerGray, thickness = 0.6.dp)
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Image,
+                    title = "Photos",
+                    subtitle = "Saved in NeoTactileMedia/images",
+                    onClick = {}
                 )
-
-                SettingsSummaryRow(
-                    icon = Icons.Default.Block,
-                    title = language.tr("ব্লক করা কন্টাক্ট (Blocked Contacts)", "Blocked Contacts"),
-                    value = "$blockedCount Users"
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Videocam,
+                    title = "Videos",
+                    subtitle = "320 MB",
+                    onClick = {}
                 )
-
-                SettingsSummaryRow(
-                    icon = Icons.Default.Devices,
-                    title = language.tr("লিঙ্কড ডিভাইস (Linked Devices)", "Linked Devices"),
-                    value = "$deviceModel ($hardwareId)"
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Mic,
+                    title = "Voice messages",
+                    subtitle = "Saved in NeoTactileMedia/voice_notes",
+                    onClick = {}
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Description,
+                    title = "Documents & Large files",
+                    subtitle = "${deviceStorageStats?.savedFilesCount ?: 1} files in NeoTactileMedia/documents",
+                    onClick = {}
                 )
             }
         }
 
-        // 7. Biometric / PIN Security Gate & Sign Out Card
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .frostedGlassCard(cornerRadius = 24.dp, accentGlow = GlowingCyan)
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+        SettingsSubRoute.LINKED_DEVICES -> {
+            // SCREEN 26: LINKED DEVICES — Matches Ref_1 #26 & Ref_2 Linked Devices
+            WhatsAppSubScreenScaffold(
+                title = "Linked devices",
+                onBack = { currentSubRoute = SettingsSubRoute.MAIN_SETTINGS }
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.VerifiedUser,
-                        contentDescription = null,
-                        tint = TactileEmerald,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = language.tr("সিকিউরিটি, বায়োমেট্রিক লক ও লগআউট", "SECURITY, APP LOCK & ACCOUNT"),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = TextPrimary
-                    )
-                }
-
-                NeoTactileToggleSwitch(
-                    checked = biometricGateEnabled,
-                    onCheckedChange = onToggleBiometricGate,
-                    label = language.tr("বায়োমেট্রিক / পিন লক", "Biometric / PIN App Lock"),
-                    subtitle = language.tr(
-                        "ব্যাকগ্রাউন্ডে ৬০ সেকেন্ড থাকলে পিন (2026) বা ফিঙ্গারপ্রিন্ট চাইবে",
-                        "Require fingerprint or PIN (2026) after 60s in background"
-                    ),
-                    testTag = "biometric_gate_toggle"
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    NeoTactilePillButton(
-                        text = language.shortTr("অ্যাপ লক করুন", "Lock App"),
-                        icon = Icons.Default.Fingerprint,
-                        onClick = onLockNow,
-                        modifier = Modifier.weight(1f),
-                        testTag = "test_app_lock_button"
+                    Box(
+                        modifier = Modifier
+                            .size(96.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(Color(0xFFE7FCE8)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Devices,
+                            contentDescription = "Linked Devices",
+                            tint = WhatsAppActionGreen,
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        text = "Use WhatsApp on other devices",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = LightTextPrimary,
+                        textAlign = TextAlign.Center
                     )
-                    NeoTactilePillButton(
-                        text = language.shortTr("সাইন আউট", "Sign Out"),
-                        icon = Icons.AutoMirrored.Filled.Logout,
-                        onClick = onSignOut,
-                        isActive = false,
-                        accentColor = TactileCrimson,
-                        modifier = Modifier.weight(1f),
-                        testTag = "sign_out_button"
-                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(WhatsAppActionGreen)
+                            .clickable {},
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Link a device",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
+                HorizontalDivider(color = LightDividerGray, thickness = 0.8.dp)
+                Text(
+                    text = "Device Status",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = LightTextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.PhoneAndroid,
+                    title = deviceModel,
+                    subtitle = "Active now • Hardware ID: $hardwareId",
+                    onClick = {}
+                )
+            }
+        }
+
+        SettingsSubRoute.STARRED_MESSAGES -> {
+            // SCREEN 27: STARRED MESSAGES — Matches Ref_1 #27
+            WhatsAppSubScreenScaffold(
+                title = "Starred messages",
+                onBack = { currentSubRoute = SettingsSubRoute.MAIN_SETTINGS }
+            ) {
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Star,
+                    title = "Sadia • Today",
+                    subtitle = "📷 Photo",
+                    onClick = {}
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Star,
+                    title = "Rafi • Yesterday",
+                    subtitle = "🎤 Voice message (0:14)",
+                    onClick = {}
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Star,
+                    title = "Mom • Yesterday",
+                    subtitle = "Happy birthday! 🎂",
+                    onClick = {}
+                )
+            }
+        }
+
+        SettingsSubRoute.BROADCAST_LISTS -> {
+            // SCREEN 28: BROADCAST LISTS — Matches Ref_1 #28
+            WhatsAppSubScreenScaffold(
+                title = "Broadcast lists",
+                onBack = { currentSubRoute = SettingsSubRoute.MAIN_SETTINGS }
+            ) {
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Campaign,
+                    title = "New broadcast",
+                    subtitle = "Send a message to multiple contacts at once",
+                    onClick = {}
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Star,
+                    title = "Starred messages",
+                    subtitle = "Quickly access important broadcast announcements",
+                    onClick = { currentSubRoute = SettingsSubRoute.STARRED_MESSAGES }
+                )
+            }
+        }
+
+        SettingsSubRoute.QR_CODE -> {
+            // SCREEN 29: QR CODE — Matches Ref_1 #29
+            WhatsAppSubScreenScaffold(
+                title = "QR code",
+                onBack = { currentSubRoute = SettingsSubRoute.MAIN_SETTINGS }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    WhatsAppAvatarCircle(name = displayName, size = 64.dp)
+                    Text(
+                        text = displayName,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = LightTextPrimary
+                    )
+                    Text(
+                        text = "WhatsApp contact • ID: $shortCode",
+                        fontSize = 13.sp,
+                        color = LightTextSecondary
+                    )
+                    NeoTactileQrCodeView(
+                        codeData = "$shortCode|$currentUserId",
+                        size = 210.dp
+                    )
+                    Text(
+                        text = "Scan this code to start a WhatsApp chat with me.",
+                        fontSize = 13.sp,
+                        color = LightTextSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp)
+                            .clip(RoundedCornerShape(23.dp))
+                            .background(WhatsAppAccentGreen)
+                            .clickable {},
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Save to gallery",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+
+        SettingsSubRoute.INVITE_FRIENDS -> {
+            // SCREEN 30: INVITE FRIENDS — Matches Ref_1 #30
+            WhatsAppSubScreenScaffold(
+                title = "Invite friends",
+                onBack = { currentSubRoute = SettingsSubRoute.MAIN_SETTINGS }
+            ) {
+                Text(
+                    text = "Share WhatsApp with your friends",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = LightTextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Share,
+                    title = "Share link",
+                    subtitle = "https://neotactile.app/invite/$shortCode",
+                    onClick = {}
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.ContentCopy,
+                    title = "Copy link",
+                    subtitle = "Copy invite link and Short ID ($shortCode)",
+                    onClick = {}
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.Share,
+                    title = "Share to...",
+                    subtitle = "Send invite via SMS or other apps",
+                    onClick = {}
+                )
+                WhatsAppSettingsRow(
+                    icon = Icons.Default.PersonAdd,
+                    title = "Invite friends",
+                    subtitle = "WhatsApp is more fun with friends!",
+                    onClick = {}
+                )
             }
         }
     }
 }
 
 @Composable
-private fun SettingsSummaryRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+private fun WhatsAppSubScreenScaffold(
     title: String,
-    value: String,
-    onClick: () -> Unit = {}
+    onBack: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(LightBackgroundWhite)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(WhatsAppHeaderGreen)
+                .padding(horizontal = 4.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White
+                    )
+                }
+                Text(
+                    text = title,
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            IconButton(onClick = {}) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "More",
+                    tint = Color.White
+                )
+            }
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 48.dp)
+        ) {
+            item {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+private fun WhatsAppSettingsRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF102019))
             .clickable { onClick() }
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = title,
+            tint = LightTextSecondary,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(18.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                color = LightTextPrimary
+            )
+            if (subtitle.isNotBlank()) {
+                Text(
+                    text = subtitle,
+                    fontSize = 13.sp,
+                    color = LightTextSecondary
+                )
+            }
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = LightTextMuted,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+@Composable
+private fun WhatsAppSimpleValueRow(
+    title: String,
+    value: String,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Text(
+            text = title,
+            fontSize = 16.sp,
+            color = LightTextPrimary
+        )
+        Text(
+            text = value,
+            fontSize = 13.sp,
+            color = LightTextSecondary
+        )
+    }
+}
+
+@Composable
+private fun WhatsAppSwitchRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f)
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = GlowingCyan,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextPrimary
-            )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, fontSize = 16.sp, color = LightTextPrimary)
+            Text(text = subtitle, fontSize = 13.sp, color = LightTextSecondary)
         }
-        Text(
-            text = value,
-            style = MaterialTheme.typography.labelSmall,
-            color = GlowingCyan,
-            fontWeight = FontWeight.SemiBold
+        Spacer(modifier = Modifier.width(12.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = WhatsAppActionGreen
+            )
         )
     }
 }

@@ -8,7 +8,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -25,16 +25,21 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.filled.Contrast
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.RadioButtonChecked
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -55,11 +60,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -74,22 +81,22 @@ import com.example.ui.auth.VerifiedAccountStore
 import com.example.ui.auth.areAllPermissionsGranted
 import com.example.ui.auth.getRequiredRuntimePermissions
 import com.example.ui.auth.performGoogleSignOut
-import com.example.ui.components.frostedGlassCard
-import com.example.ui.components.neoTactileBackground
 import com.example.ui.screens.BiometricLockScreen
 import com.example.ui.screens.ChatScreen
 import com.example.ui.screens.DeviceBannedScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.ProfileScreen
+import com.example.ui.screens.SettingsSubRoute
 import com.example.ui.screens.UsersDirectoryScreen
-import com.example.ui.theme.DeepMatteSlateStart
-import com.example.ui.theme.ElectricBlue
-import com.example.ui.theme.GlowingCyan
+import com.example.ui.theme.LightBackgroundWhite
+import com.example.ui.theme.LightDividerGray
+import com.example.ui.theme.LightTextPrimary
+import com.example.ui.theme.LightTextSecondary
 import com.example.ui.theme.NeoTactileTheme
-import com.example.ui.theme.TactileAmber
-import com.example.ui.theme.TactileEmerald
-import com.example.ui.theme.TextPrimary
-import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.WhatsAppAccentGreen
+import com.example.ui.theme.WhatsAppActionGreen
+import com.example.ui.theme.WhatsAppDarkGreen
+import com.example.ui.theme.WhatsAppHeaderGreen
 import com.example.ui.viewmodel.NeoTactileViewModel
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
@@ -100,10 +107,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 
 enum class NeoTactileRoute(val routeId: String) {
-    HOME("home"),
-    CHAT("chat"),
-    PEERS("peers"),
-    PROFILE("profile")
+    HOME("chats"),          // Screen 1: Chats (Main Page)
+    UPDATES("updates"),     // Screen 6: Updates (Status)
+    PEERS("communities"),   // Screen 10: Communities
+    CALLS("calls"),         // Screen 13: Calls
+    CHAT("open_chat"),      // Screen 2 & 3: Open Conversation / Group Chat
+    PROFILE("settings")     // Screen 17-30: Settings & Profile Sub-Screens
 }
 
 internal fun FirebaseAuth.authStateFlow(): Flow<FirebaseUser?> = callbackFlow {
@@ -123,7 +132,7 @@ class MainActivity : FragmentActivity() {
         deviceIdentityManager = AppModule.provideDeviceIdentityManager(this)
         enableEdgeToEdge()
         setContent {
-            NeoTactileTheme {
+            NeoTactileTheme(isLightTheme = true) {
                 NeoTactileRootApp(deviceIdentityManager = deviceIdentityManager)
             }
         }
@@ -171,7 +180,7 @@ fun NeoTactileRootApp(
     } else {
         val effectiveUid = user?.uid ?: activeManual?.uid ?: "verified_user"
         val effectiveEmail = user?.email ?: activeManual?.userIdOrEmail ?: "operator@neotactile.app"
-        val effectiveDisplayName = user?.displayName ?: activeManual?.displayName ?: "Verified User"
+        val effectiveDisplayName = user?.displayName ?: activeManual?.displayName ?: "SAYMON HASAN"
         val effectivePhotoUrl = user?.photoUrl?.toString()
 
         AuthenticatedMainShell(
@@ -199,7 +208,6 @@ private fun AuthenticatedMainShell(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // App-entry runtime permissions check (Camera, Microphone, Notifications)
     var allPermissionsGranted by remember {
         mutableStateOf(areAllPermissionsGranted(context))
     }
@@ -267,6 +275,8 @@ private fun AuthenticatedMainShell(
     val playbackAmplitude by viewModel.playbackAmplitude.collectAsStateWithLifecycle()
 
     var currentRoute by rememberSaveable { mutableStateOf(NeoTactileRoute.HOME) }
+    var targetSettingsSubRoute by remember { mutableStateOf(SettingsSubRoute.MAIN_SETTINGS) }
+    var externalCreateStatusMode by remember { mutableStateOf<String?>(null) }
 
     // 1. Hardware Device Gatekeeper Check
     val gatekeeper = deviceGatekeeper
@@ -289,41 +299,65 @@ private fun AuthenticatedMainShell(
         return
     }
 
-    // BackHandler for secondary tabs returning to HOME
+    // BackHandler for secondary tabs returning to HOME (Chats)
     if (currentRoute != NeoTactileRoute.HOME) {
         BackHandler {
             currentRoute = NeoTactileRoute.HOME
         }
     }
 
+    val isFullScreenRoute = currentRoute == NeoTactileRoute.CHAT ||
+        activeStoryViewerItem != null ||
+        externalCreateStatusMode != null
+
     NeoTactileTheme(isLightTheme = isLightTheme) {
         Scaffold(
             modifier = Modifier
                 .fillMaxSize()
-                .neoTactileBackground(),
-            containerColor = Color.Transparent,
+                .background(LightBackgroundWhite),
+            containerColor = LightBackgroundWhite,
             contentWindowInsets = WindowInsets.statusBars,
             topBar = {
-                NeoTactileTopBar(
-                    shortCode = viewModel.currentUserShortCode,
-                    language = appLanguage,
-                    statusBanner = statusBanner,
-                    allPermissionsGranted = allPermissionsGranted,
-                    onRequestPermissions = {
-                        permissionLauncher.launch(getRequiredRuntimePermissions().toTypedArray())
-                    },
-                    onCycleLanguage = { viewModel.cycleAppLanguage() },
-                    onToggleTheme = { viewModel.toggleThemeMode() },
-                    onDismissStatus = { viewModel.clearStatusBanner() },
-                    onQuickLock = { viewModel.lockAppImmediately() }
-                )
+                if (!isFullScreenRoute) {
+                    WhatsAppReferenceTopBar(
+                        currentRoute = currentRoute,
+                        searchQuery = searchQuery,
+                        onSearchQueryChange = { viewModel.updateSearchQuery(it) },
+                        statusBanner = statusBanner,
+                        allPermissionsGranted = allPermissionsGranted,
+                        onRequestPermissions = {
+                            permissionLauncher.launch(getRequiredRuntimePermissions().toTypedArray())
+                        },
+                        onSelectRoute = { route ->
+                            if (route == NeoTactileRoute.PROFILE) {
+                                targetSettingsSubRoute = SettingsSubRoute.MAIN_SETTINGS
+                            }
+                            currentRoute = route
+                        },
+                        onOpenSettingsSubRoute = { subRoute ->
+                            targetSettingsSubRoute = subRoute
+                            currentRoute = NeoTactileRoute.PROFILE
+                        },
+                        onOpenCameraStatus = {
+                            currentRoute = NeoTactileRoute.UPDATES
+                            externalCreateStatusMode = "PHOTO"
+                        },
+                        onDismissStatus = { viewModel.clearStatusBanner() }
+                    )
+                }
             },
             bottomBar = {
-                NeoTactileBottomBar(
-                    language = appLanguage,
-                    currentRoute = currentRoute,
-                    onSelectRoute = { currentRoute = it }
-                )
+                if (!isFullScreenRoute) {
+                    WhatsAppReferenceBottomBar(
+                        currentRoute = currentRoute,
+                        onSelectRoute = { route ->
+                            if (route == NeoTactileRoute.PROFILE) {
+                                targetSettingsSubRoute = SettingsSubRoute.MAIN_SETTINGS
+                            }
+                            currentRoute = route
+                        }
+                    )
+                }
             }
         ) { innerPadding ->
             Box(
@@ -355,8 +389,80 @@ private fun AuthenticatedMainShell(
                                 viewModel.togglePinConversation(peerId)
                             },
                             onStartCallFromHome = { peerId, peerName, callType ->
+                                viewModel.selectPeer(peerId)
                                 viewModel.startWebRtcCall(peerId, peerName, callType)
-                            }
+                                currentRoute = NeoTactileRoute.CHAT
+                            },
+                            activeSubTab = 0,
+                            searchQuery = searchQuery,
+                            externalCreateStatusMode = externalCreateStatusMode,
+                            onDismissExternalCreateStatus = { externalCreateStatusMode = null }
+                        )
+                    }
+
+                    NeoTactileRoute.UPDATES -> {
+                        HomeScreen(
+                            language = appLanguage,
+                            stories = activeStories,
+                            contacts = resolvedContacts,
+                            callLogs = callLogs,
+                            activeStoryViewerItem = activeStoryViewerItem,
+                            onPublishStory = { caption, preset ->
+                                viewModel.publishEphemeralStory(caption, preset)
+                            },
+                            onOpenStory = { story -> viewModel.openStoryViewer(story) },
+                            onCloseStory = { viewModel.closeStoryViewer() },
+                            onSelectContactForChat = { peerId ->
+                                viewModel.selectPeer(peerId)
+                                currentRoute = NeoTactileRoute.CHAT
+                            },
+                            onNavigateToDirectory = {
+                                currentRoute = NeoTactileRoute.PEERS
+                            },
+                            onTogglePinContact = { peerId ->
+                                viewModel.togglePinConversation(peerId)
+                            },
+                            onStartCallFromHome = { peerId, peerName, callType ->
+                                viewModel.startWebRtcCall(peerId, peerName, callType)
+                            },
+                            activeSubTab = 1,
+                            searchQuery = searchQuery,
+                            externalCreateStatusMode = externalCreateStatusMode,
+                            onDismissExternalCreateStatus = { externalCreateStatusMode = null }
+                        )
+                    }
+
+                    NeoTactileRoute.CALLS -> {
+                        HomeScreen(
+                            language = appLanguage,
+                            stories = activeStories,
+                            contacts = resolvedContacts,
+                            callLogs = callLogs,
+                            activeStoryViewerItem = activeStoryViewerItem,
+                            onPublishStory = { caption, preset ->
+                                viewModel.publishEphemeralStory(caption, preset)
+                            },
+                            onOpenStory = { story -> viewModel.openStoryViewer(story) },
+                            onCloseStory = { viewModel.closeStoryViewer() },
+                            onSelectContactForChat = { peerId ->
+                                viewModel.selectPeer(peerId)
+                                currentRoute = NeoTactileRoute.CHAT
+                            },
+                            onNavigateToDirectory = {
+                                currentRoute = NeoTactileRoute.PEERS
+                            },
+                            onTogglePinContact = { peerId ->
+                                viewModel.togglePinConversation(peerId)
+                            },
+                            onStartCallFromHome = { peerId, peerName, callType ->
+                                viewModel.selectPeer(peerId)
+                                viewModel.startWebRtcCall(peerId, peerName, callType)
+                                currentRoute = NeoTactileRoute.CHAT
+                            },
+                            activeSubTab = 2,
+                            searchQuery = searchQuery,
+                            externalCreateStatusMode = externalCreateStatusMode,
+                            onDismissExternalCreateStatus = { externalCreateStatusMode = null }
                         )
                     }
 
@@ -406,6 +512,9 @@ private fun AuthenticatedMainShell(
                             },
                             onEndWebRtcCall = { elapsedSec ->
                                 viewModel.endActiveWebRtcCall(elapsedSec)
+                            },
+                            onBackToChatsList = {
+                                currentRoute = NeoTactileRoute.HOME
                             }
                         )
                     }
@@ -479,7 +588,8 @@ private fun AuthenticatedMainShell(
                                     onSignOutComplete = onSignOutComplete,
                                     scope = scope
                                 )
-                            }
+                            },
+                            initialSubRoute = targetSettingsSubRoute
                         )
                     }
                 }
@@ -488,121 +598,241 @@ private fun AuthenticatedMainShell(
     }
 }
 
+/**
+ * Matches the Green WhatsApp Header Bar in WhatsApp_UI_Reference_1.png & WhatsApp_UI_Reference_2.png:
+ * - Row 1: "WhatsApp" (or current tab title) on left; Camera, Search, More (3-dots) on right.
+ * - Row 2: [Camera] | Chats | Updates | Communities | Calls tab bar with white bottom underline.
+ */
 @Composable
-private fun NeoTactileTopBar(
-    shortCode: String,
-    language: AppLanguage,
+private fun WhatsAppReferenceTopBar(
+    currentRoute: NeoTactileRoute,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
     statusBanner: String?,
     allPermissionsGranted: Boolean,
     onRequestPermissions: () -> Unit,
-    onCycleLanguage: () -> Unit,
-    onToggleTheme: () -> Unit,
-    onDismissStatus: () -> Unit,
-    onQuickLock: () -> Unit
+    onSelectRoute: (NeoTactileRoute) -> Unit,
+    onOpenSettingsSubRoute: (SettingsSubRoute) -> Unit,
+    onOpenCameraStatus: () -> Unit,
+    onDismissStatus: () -> Unit
 ) {
+    var showSearchField by remember { mutableStateOf(false) }
+    var showOverflowMenu by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .background(WhatsAppHeaderGreen)
             .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(horizontal = 20.dp, vertical = 8.dp)
     ) {
+        // Row 1: Title + Camera, Search, More Icons
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.GraphicEq,
-                    contentDescription = null,
-                    tint = GlowingCyan,
-                    modifier = Modifier.size(26.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Column {
-                    Text(
-                        text = stringResource(id = R.string.auth_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = "MY ID: $shortCode",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = GlowingCyan
-                    )
-                }
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Language Switch Pill
+            if (showSearchField) {
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF14281F))
-                        .border(1.dp, GlowingCyan.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
-                        .clickable { onCycleLanguage() }
-                        .padding(horizontal = 10.dp, vertical = 7.dp)
-                        .testTag("language_toggle_button"),
+                        .weight(1f)
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.White)
+                        .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Language,
-                        contentDescription = "Switch Language",
-                        tint = GlowingCyan,
-                        modifier = Modifier.size(16.dp)
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = LightTextSecondary,
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = onSearchQueryChange,
+                        textStyle = TextStyle(color = LightTextPrimary, fontSize = 15.sp),
+                        cursorBrush = SolidColor(WhatsAppActionGreen),
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = {
+                            onSearchQueryChange("")
+                            showSearchField = false
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close Search",
+                            tint = LightTextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    text = when (currentRoute) {
+                        NeoTactileRoute.UPDATES -> "Updates"
+                        NeoTactileRoute.PEERS -> "Communities"
+                        NeoTactileRoute.CALLS -> "Calls"
+                        NeoTactileRoute.PROFILE -> "Settings"
+                        else -> "WhatsApp"
+                    },
+                    color = Color.White,
+                    fontSize = 21.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onOpenCameraStatus) {
+                    Icon(
+                        imageVector = Icons.Default.CameraAlt,
+                        contentDescription = "Camera",
+                        tint = Color.White
+                    )
+                }
+
+                IconButton(onClick = { showSearchField = !showSearchField }) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = Color.White
+                    )
+                }
+
+                Box {
+                    IconButton(
+                        onClick = { showOverflowMenu = true },
+                        modifier = Modifier.testTag("top_bar_more_menu_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "More options",
+                            tint = Color.White
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showOverflowMenu,
+                        onDismissRequest = { showOverflowMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("New group") },
+                            onClick = {
+                                showOverflowMenu = false
+                                onSelectRoute(NeoTactileRoute.PEERS)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("New broadcast") },
+                            onClick = {
+                                showOverflowMenu = false
+                                onOpenSettingsSubRoute(SettingsSubRoute.BROADCAST_LISTS)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Linked devices") },
+                            onClick = {
+                                showOverflowMenu = false
+                                onOpenSettingsSubRoute(SettingsSubRoute.LINKED_DEVICES)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Starred messages") },
+                            onClick = {
+                                showOverflowMenu = false
+                                onOpenSettingsSubRoute(SettingsSubRoute.STARRED_MESSAGES)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("My QR code") },
+                            onClick = {
+                                showOverflowMenu = false
+                                onOpenSettingsSubRoute(SettingsSubRoute.QR_CODE)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Invite friends") },
+                            onClick = {
+                                showOverflowMenu = false
+                                onOpenSettingsSubRoute(SettingsSubRoute.INVITE_FRIENDS)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Settings") },
+                            onClick = {
+                                showOverflowMenu = false
+                                onOpenSettingsSubRoute(SettingsSubRoute.MAIN_SETTINGS)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Row 2: [Camera] | Chats | Updates | Communities | Calls Tab Strip inside Green Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .clickable { onOpenCameraStatus() }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CameraAlt,
+                    contentDescription = "Status Camera",
+                    tint = Color.White.copy(alpha = 0.8f),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            val headerTabs = listOf(
+                NeoTactileRoute.HOME to "Chats",
+                NeoTactileRoute.UPDATES to "Updates",
+                NeoTactileRoute.PEERS to "Communities",
+                NeoTactileRoute.CALLS to "Calls"
+            )
+
+            headerTabs.forEach { (route, title) ->
+                val isSelected = currentRoute == route
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onSelectRoute(route) },
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(
-                        text = language.label,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.SemiBold
+                        text = title,
+                        color = if (isSelected) Color.White else Color.White.copy(alpha = 0.75f),
+                        fontSize = 14.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier.padding(vertical = 10.dp)
                     )
-                }
-
-                // Theme Switch Button
-                IconButton(
-                    onClick = onToggleTheme,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF14281F))
-                        .testTag("top_bar_theme_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Contrast,
-                        contentDescription = "Toggle Green/White Light or Dark Theme",
-                        tint = GlowingCyan
-                    )
-                }
-
-                // Quick Lock Button
-                IconButton(
-                    onClick = onQuickLock,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xFF14281F))
-                        .testTag("top_bar_lock_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = "Lock Session Now",
-                        tint = GlowingCyan
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .background(if (isSelected) Color.White else Color.Transparent)
                     )
                 }
             }
         }
 
+        // Permission Verification Banner (only shown if any runtime permission is not yet granted)
         AnimatedVisibility(visible = !allPermissionsGranted) {
             Row(
                 modifier = Modifier
-                    .padding(top = 8.dp)
                     .fillMaxWidth()
-                    .frostedGlassCard(cornerRadius = 16.dp, accentGlow = TactileAmber)
+                    .background(Color(0xFFE7FCE8))
                     .clickable { onRequestPermissions() }
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
                     .testTag("main_permission_banner"),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -614,138 +844,140 @@ private fun NeoTactileTopBar(
                     Icon(
                         imageVector = Icons.Default.Security,
                         contentDescription = null,
-                        tint = TactileAmber,
+                        tint = WhatsAppHeaderGreen,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = language.tr(
-                            "কল, ক্যামেরা, ভয়েস ও মোবাইল স্টোরেজ ব্যবহারের জন্য সব পারমিশন Allow করুন",
-                            "Tap to Allow Camera, Mic & Notification permissions"
-                        ),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextPrimary
+                        text = "Allow Camera, Mic & Notification permissions",
+                        fontSize = 12.sp,
+                        color = WhatsAppDarkGreen
                     )
                 }
                 Text(
                     text = "Allow",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = GlowingCyan,
+                    fontSize = 12.sp,
+                    color = WhatsAppActionGreen,
                     fontWeight = FontWeight.Bold
                 )
             }
         }
 
+        // Transient Action Feedback Toast Banner
         AnimatedVisibility(visible = !statusBanner.isNullOrBlank()) {
             Box(
                 modifier = Modifier
-                    .padding(top = 8.dp)
                     .fillMaxWidth()
-                    .frostedGlassCard(cornerRadius = 16.dp, accentGlow = TactileEmerald)
+                    .background(Color(0xFFD9FDD3))
                     .clickable { onDismissStatus() }
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
             ) {
                 Text(
                     text = statusBanner ?: "",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TactileEmerald
+                    fontSize = 12.sp,
+                    color = WhatsAppDarkGreen,
+                    fontWeight = FontWeight.Medium
                 )
             }
         }
     }
 }
 
+/**
+ * Matches the Clean White Bottom Navigation Bar in WhatsApp_UI_Reference_1.png & WhatsApp_UI_Reference_2.png:
+ * Tabs: Chats | Updates | Communities | Calls | Settings
+ */
 @Composable
-private fun NeoTactileBottomBar(
-    language: AppLanguage,
+private fun WhatsAppReferenceBottomBar(
     currentRoute: NeoTactileRoute,
     onSelectRoute: (NeoTactileRoute) -> Unit
 ) {
-    NavigationBar(
-        containerColor = DeepMatteSlateStart.copy(alpha = 0.96f),
-        tonalElevation = 8.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.navigationBars)
-    ) {
-        NavigationBarItem(
-            selected = currentRoute == NeoTactileRoute.HOME,
-            onClick = { onSelectRoute(NeoTactileRoute.HOME) },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Home,
-                    contentDescription = language.shortTr("হোম ও স্ট্যাটাস", "Updates")
-                )
-            },
-            label = { Text(language.shortTr("হোম", "Updates")) },
-            colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = GlowingCyan,
-                selectedTextColor = GlowingCyan,
-                indicatorColor = ElectricBlue.copy(alpha = 0.28f),
-                unselectedIconColor = TextSecondary,
-                unselectedTextColor = TextSecondary
-            ),
-            modifier = Modifier.testTag("nav_tab_home")
-        )
+    Column(modifier = Modifier.fillMaxWidth()) {
+        HorizontalDivider(color = LightDividerGray, thickness = 0.8.dp)
+        NavigationBar(
+            containerColor = LightBackgroundWhite,
+            tonalElevation = 0.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars)
+        ) {
+            val itemColors = NavigationBarItemDefaults.colors(
+                selectedIconColor = WhatsAppDarkGreen,
+                selectedTextColor = LightTextPrimary,
+                indicatorColor = Color(0xFFD9FDD3),
+                unselectedIconColor = LightTextSecondary,
+                unselectedTextColor = LightTextSecondary
+            )
 
-        NavigationBarItem(
-            selected = currentRoute == NeoTactileRoute.CHAT,
-            onClick = { onSelectRoute(NeoTactileRoute.CHAT) },
-            icon = {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Chat,
-                    contentDescription = language.shortTr("চ্যাট ও কল", "Chats")
-                )
-            },
-            label = { Text(language.shortTr("চ্যাট", "Chats")) },
-            colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = GlowingCyan,
-                selectedTextColor = GlowingCyan,
-                indicatorColor = ElectricBlue.copy(alpha = 0.28f),
-                unselectedIconColor = TextSecondary,
-                unselectedTextColor = TextSecondary
-            ),
-            modifier = Modifier.testTag("nav_tab_chat")
-        )
+            NavigationBarItem(
+                selected = currentRoute == NeoTactileRoute.HOME,
+                onClick = { onSelectRoute(NeoTactileRoute.HOME) },
+                icon = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Chat,
+                        contentDescription = "Chats"
+                    )
+                },
+                label = { Text("Chats", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                colors = itemColors,
+                modifier = Modifier.testTag("nav_tab_home")
+            )
 
-        NavigationBarItem(
-            selected = currentRoute == NeoTactileRoute.PEERS,
-            onClick = { onSelectRoute(NeoTactileRoute.PEERS) },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.People,
-                    contentDescription = language.shortTr("ইউজার ও কমিউনিটি", "Users")
-                )
-            },
-            label = { Text(language.shortTr("ইউজার অ্যাড", "Communities")) },
-            colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = GlowingCyan,
-                selectedTextColor = GlowingCyan,
-                indicatorColor = ElectricBlue.copy(alpha = 0.28f),
-                unselectedIconColor = TextSecondary,
-                unselectedTextColor = TextSecondary
-            ),
-            modifier = Modifier.testTag("nav_tab_peers")
-        )
+            NavigationBarItem(
+                selected = currentRoute == NeoTactileRoute.UPDATES,
+                onClick = { onSelectRoute(NeoTactileRoute.UPDATES) },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.RadioButtonChecked,
+                        contentDescription = "Updates"
+                    )
+                },
+                label = { Text("Updates", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                colors = itemColors,
+                modifier = Modifier.testTag("nav_tab_updates")
+            )
 
-        NavigationBarItem(
-            selected = currentRoute == NeoTactileRoute.PROFILE,
-            onClick = { onSelectRoute(NeoTactileRoute.PROFILE) },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = language.shortTr("সেটিংস", "Settings")
-                )
-            },
-            label = { Text(language.shortTr("সেটিংস", "Settings")) },
-            colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = GlowingCyan,
-                selectedTextColor = GlowingCyan,
-                indicatorColor = ElectricBlue.copy(alpha = 0.28f),
-                unselectedIconColor = TextSecondary,
-                unselectedTextColor = TextSecondary
-            ),
-            modifier = Modifier.testTag("nav_tab_profile")
-        )
+            NavigationBarItem(
+                selected = currentRoute == NeoTactileRoute.PEERS,
+                onClick = { onSelectRoute(NeoTactileRoute.PEERS) },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Groups,
+                        contentDescription = "Communities"
+                    )
+                },
+                label = { Text("Communities", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                colors = itemColors,
+                modifier = Modifier.testTag("nav_tab_peers")
+            )
+
+            NavigationBarItem(
+                selected = currentRoute == NeoTactileRoute.CALLS,
+                onClick = { onSelectRoute(NeoTactileRoute.CALLS) },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Call,
+                        contentDescription = "Calls"
+                    )
+                },
+                label = { Text("Calls", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                colors = itemColors,
+                modifier = Modifier.testTag("nav_tab_chat")
+            )
+
+            NavigationBarItem(
+                selected = currentRoute == NeoTactileRoute.PROFILE,
+                onClick = { onSelectRoute(NeoTactileRoute.PROFILE) },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "Settings"
+                    )
+                },
+                label = { Text("Settings", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+                colors = itemColors,
+                modifier = Modifier.testTag("nav_tab_profile")
+            )
+        }
     }
 }
