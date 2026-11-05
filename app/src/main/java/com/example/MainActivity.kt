@@ -2,8 +2,10 @@ package com.example
 
 import android.os.Bundle
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,6 +34,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +44,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,6 +70,9 @@ import com.example.data.model.AppLanguage
 import com.example.di.AppModule
 import com.example.security.DeviceIdentityManager
 import com.example.ui.auth.LoginScreen
+import com.example.ui.auth.VerifiedAccountStore
+import com.example.ui.auth.areAllPermissionsGranted
+import com.example.ui.auth.getRequiredRuntimePermissions
 import com.example.ui.auth.performGoogleSignOut
 import com.example.ui.components.frostedGlassCard
 import com.example.ui.components.neoTactileBackground
@@ -79,6 +86,7 @@ import com.example.ui.theme.DeepMatteSlateStart
 import com.example.ui.theme.ElectricBlue
 import com.example.ui.theme.GlowingCyan
 import com.example.ui.theme.NeoTactileTheme
+import com.example.ui.theme.TactileAmber
 import com.example.ui.theme.TactileEmerald
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
@@ -141,33 +149,74 @@ fun NeoTactileRootApp(
     deviceIdentityManager: DeviceIdentityManager,
     auth: FirebaseAuth = Firebase.auth
 ) {
+    val context = LocalContext.current
     val currentUser by auth.authStateFlow().collectAsStateWithLifecycle(initialValue = auth.currentUser)
+    var manualSession by remember {
+        mutableStateOf(VerifiedAccountStore.getActiveManualSession(context))
+    }
     val hardwareId = remember { deviceIdentityManager.getHardwareAndroidId() }
     val user = currentUser
+    val activeManual = manualSession
 
-    if (user == null) {
+    if (user == null && activeManual == null) {
         LoginScreen(
             hardwareId = hardwareId,
-            onAuthSuccess = {}
+            onAuthSuccess = {
+                manualSession = VerifiedAccountStore.getActiveManualSession(context)
+            },
+            onManualVerifiedSuccess = { session ->
+                manualSession = session
+            }
         )
     } else {
+        val effectiveUid = user?.uid ?: activeManual?.uid ?: "verified_user"
+        val effectiveEmail = user?.email ?: activeManual?.userIdOrEmail ?: "operator@neotactile.app"
+        val effectiveDisplayName = user?.displayName ?: activeManual?.displayName ?: "Verified User"
+        val effectivePhotoUrl = user?.photoUrl?.toString()
+
         AuthenticatedMainShell(
-            user = user,
-            deviceIdentityManager = deviceIdentityManager
+            currentUserId = effectiveUid,
+            currentUserEmail = effectiveEmail,
+            currentUserDisplayName = effectiveDisplayName,
+            currentUserPhotoUrl = effectivePhotoUrl,
+            deviceIdentityManager = deviceIdentityManager,
+            onSignOutComplete = {
+                manualSession = null
+            }
         )
     }
 }
 
 @Composable
 private fun AuthenticatedMainShell(
-    user: FirebaseUser,
-    deviceIdentityManager: DeviceIdentityManager
+    currentUserId: String,
+    currentUserEmail: String,
+    currentUserDisplayName: String,
+    currentUserPhotoUrl: String?,
+    deviceIdentityManager: DeviceIdentityManager,
+    onSignOutComplete: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    // App-entry runtime permissions check (Camera, Microphone, Notifications)
+    var allPermissionsGranted by remember {
+        mutableStateOf(areAllPermissionsGranted(context))
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        allPermissionsGranted = areAllPermissionsGranted(context)
+    }
+
+    LaunchedEffect(Unit) {
+        if (!allPermissionsGranted) {
+            permissionLauncher.launch(getRequiredRuntimePermissions().toTypedArray())
+        }
+    }
+
     val viewModel: NeoTactileViewModel = viewModel(
-        key = user.uid,
+        key = currentUserId,
         factory = viewModelFactory {
             initializer {
                 val app = checkNotNull(this[APPLICATION_KEY]) {
@@ -177,10 +226,10 @@ private fun AuthenticatedMainShell(
                     repository = AppModule.provideRepository(app),
                     audioEngine = AppModule.provideAudioEngine(app),
                     deviceIdentityManager = AppModule.provideDeviceIdentityManager(app),
-                    currentUserId = user.uid,
-                    currentUserEmail = user.email ?: "operator@neotactile.app",
-                    currentUserDisplayName = user.displayName ?: "Verified User",
-                    currentUserPhotoUrl = user.photoUrl?.toString()
+                    currentUserId = currentUserId,
+                    currentUserEmail = currentUserEmail,
+                    currentUserDisplayName = currentUserDisplayName,
+                    currentUserPhotoUrl = currentUserPhotoUrl
                 )
             }
         }
@@ -191,6 +240,7 @@ private fun AuthenticatedMainShell(
     val deviceGatekeeper by viewModel.currentDeviceGatekeeper.collectAsStateWithLifecycle()
     val isAppLocked by viewModel.isAppLocked.collectAsStateWithLifecycle()
     val biometricLockEnabled by viewModel.biometricLockEnabled.collectAsStateWithLifecycle()
+    val deviceStorageStats by viewModel.deviceStorageStats.collectAsStateWithLifecycle()
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
     val resolvedContacts by viewModel.resolvedContacts.collectAsStateWithLifecycle()
     val communities by viewModel.communities.collectAsStateWithLifecycle()
@@ -258,6 +308,10 @@ private fun AuthenticatedMainShell(
                     shortCode = viewModel.currentUserShortCode,
                     language = appLanguage,
                     statusBanner = statusBanner,
+                    allPermissionsGranted = allPermissionsGranted,
+                    onRequestPermissions = {
+                        permissionLauncher.launch(getRequiredRuntimePermissions().toTypedArray())
+                    },
                     onCycleLanguage = { viewModel.cycleAppLanguage() },
                     onToggleTheme = { viewModel.toggleThemeMode() },
                     onDismissStatus = { viewModel.clearStatusBanner() },
@@ -402,6 +456,11 @@ private fun AuthenticatedMainShell(
                             isLightTheme = isLightTheme,
                             onToggleLightTheme = { viewModel.setLightTheme(it) },
                             blockedCount = blockedUserIds.size,
+                            deviceStorageStats = deviceStorageStats,
+                            allPermissionsGranted = allPermissionsGranted,
+                            onRequestPermissions = {
+                                permissionLauncher.launch(getRequiredRuntimePermissions().toTypedArray())
+                            },
                             userProfile = userProfile,
                             currentUserId = viewModel.currentUserId,
                             fallbackEmail = viewModel.currentUserEmail,
@@ -417,7 +476,7 @@ private fun AuthenticatedMainShell(
                             onSignOut = {
                                 performGoogleSignOut(
                                     context = context,
-                                    onSignOutComplete = {},
+                                    onSignOutComplete = onSignOutComplete,
                                     scope = scope
                                 )
                             }
@@ -434,6 +493,8 @@ private fun NeoTactileTopBar(
     shortCode: String,
     language: AppLanguage,
     statusBanner: String?,
+    allPermissionsGranted: Boolean,
+    onRequestPermissions: () -> Unit,
     onCycleLanguage: () -> Unit,
     onToggleTheme: () -> Unit,
     onDismissStatus: () -> Unit,
@@ -531,6 +592,47 @@ private fun NeoTactileTopBar(
                         tint = GlowingCyan
                     )
                 }
+            }
+        }
+
+        AnimatedVisibility(visible = !allPermissionsGranted) {
+            Row(
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .fillMaxWidth()
+                    .frostedGlassCard(cornerRadius = 16.dp, accentGlow = TactileAmber)
+                    .clickable { onRequestPermissions() }
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                    .testTag("main_permission_banner"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Security,
+                        contentDescription = null,
+                        tint = TactileAmber,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = language.tr(
+                            "কল, ক্যামেরা, ভয়েস ও মোবাইল স্টোরেজ ব্যবহারের জন্য সব পারমিশন Allow করুন",
+                            "Tap to Allow Camera, Mic & Notification permissions"
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextPrimary
+                    )
+                }
+                Text(
+                    text = "Allow",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = GlowingCyan,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
 

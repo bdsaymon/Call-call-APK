@@ -103,6 +103,14 @@ class NeoTactileViewModel(
     val isAppLocked: StateFlow<Boolean> = deviceIdentityManager.isAppLocked
     val biometricLockEnabled: StateFlow<Boolean> = deviceIdentityManager.biometricLockEnabled
 
+    // Mobile Device Storage Stats Flow
+    private val _deviceStorageStats = MutableStateFlow(audioEngine.getDeviceStorageStats())
+    val deviceStorageStats: StateFlow<com.example.audio.DeviceStorageStats> = _deviceStorageStats.asStateFlow()
+
+    fun refreshDeviceStorageStats() {
+        _deviceStorageStats.value = audioEngine.getDeviceStorageStats()
+    }
+
     // Remote User Profile StateFlow (Syncs real Firestore friendsList automatically)
     val userProfile: StateFlow<UserProfile?> = repository.observeCurrentUserProfile()
         .onEach { profile ->
@@ -182,11 +190,14 @@ class NeoTactileViewModel(
         )
 
     init {
+        repository.setManualVerifiedUser(currentUserId)
         initializeSession()
     }
 
     private fun initializeSession() {
         viewModelScope.launch {
+            repository.setManualVerifiedUser(currentUserId)
+            refreshDeviceStorageStats()
             repository.ensureOrUpdateUserProfile(
                 email = currentUserEmail,
                 displayName = currentUserDisplayName,
@@ -398,6 +409,8 @@ class NeoTactileViewModel(
         _replyingToMessage.value = null
 
         viewModelScope.launch {
+            val savedFileUri = audioEngine.saveDocumentToDeviceStorage(fileName, fileDescription)
+            refreshDeviceStorageStats()
             repository.sendMessage(
                 chatId = chatId,
                 receiverId = peerId,
@@ -405,13 +418,13 @@ class NeoTactileViewModel(
                 content = fileDescription,
                 mediaType = "FILE",
                 fileName = fileName,
-                mediaUrl = "file://attachment/$fileName",
+                mediaUrl = savedFileUri,
                 participantIds = activeContact?.memberIds,
                 replyToMessageId = replyMsg?.messageId?.ifBlank { replyMsg.id },
                 replyToSenderName = replyMsg?.senderName,
                 replyToPreview = replyMsg?.content?.take(100)
             ).onSuccess {
-                _statusBannerMessage.value = "ফাইল শেয়ার করা হয়েছে: $fileName"
+                _statusBannerMessage.value = "ফাইল মোবাইল স্টোরেজে সেভ ও শেয়ার করা হয়েছে: $fileName"
             }.onFailure { e ->
                 _statusBannerMessage.value = "ফাইল শেয়ার ত্রুটি: ${e.localizedMessage}"
             }
@@ -424,6 +437,7 @@ class NeoTactileViewModel(
 
     fun stopAndSendVoiceNote() {
         val (file, durationMs) = audioEngine.stopRecording()
+        refreshDeviceStorageStats()
         if (file == null) return
         val peerId = _selectedPeerId.value
         if (peerId.isBlank()) return
@@ -448,7 +462,7 @@ class NeoTactileViewModel(
                 replyToSenderName = replyMsg?.senderName,
                 replyToPreview = replyMsg?.content?.take(100)
             ).onSuccess {
-                _statusBannerMessage.value = "ভয়েস মেসেজ পাঠানো হয়েছে"
+                _statusBannerMessage.value = "ভয়েস মেসেজ মোবাইল স্টোরেজে সেভ ও পাঠানো হয়েছে"
             }.onFailure { e ->
                 _statusBannerMessage.value = "ভয়েস মেসেজ ত্রুটি: ${e.localizedMessage}"
             }
@@ -457,6 +471,7 @@ class NeoTactileViewModel(
 
     fun cancelVoiceNoteRecording() {
         audioEngine.stopRecording()
+        refreshDeviceStorageStats()
     }
 
     fun toggleVoicePlayback(mediaUrl: String, durationMs: Long) {
@@ -478,6 +493,7 @@ class NeoTactileViewModel(
 
         viewModelScope.launch {
             val compressedUriString = audioEngine.compressAndCachePhoto(uri)
+            refreshDeviceStorageStats()
             repository.sendMessage(
                 chatId = chatId,
                 receiverId = peerId,
@@ -490,7 +506,7 @@ class NeoTactileViewModel(
                 replyToSenderName = replyMsg?.senderName,
                 replyToPreview = replyMsg?.content?.take(100)
             ).onSuccess {
-                _statusBannerMessage.value = "ছবি কম্প্রেস করে পাঠানো হয়েছে"
+                _statusBannerMessage.value = "ছবি মোবাইল স্টোরেজে কম্প্রেস করে পাঠানো হয়েছে"
             }.onFailure { e ->
                 _statusBannerMessage.value = "ছবি পাঠানো যায়নি: ${e.localizedMessage}"
             }

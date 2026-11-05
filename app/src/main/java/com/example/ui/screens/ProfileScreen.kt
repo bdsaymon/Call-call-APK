@@ -22,15 +22,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.DataUsage
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Fingerprint
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Wallpaper
 import androidx.compose.material3.Icon
@@ -53,6 +54,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.audio.DeviceStorageStats
 import com.example.data.model.AppLanguage
 import com.example.data.model.UserProfile
 import com.example.data.model.generateShortCode
@@ -63,6 +65,7 @@ import com.example.ui.components.NeoTactileToggleSwitch
 import com.example.ui.components.frostedGlassCard
 import com.example.ui.theme.ElectricBlue
 import com.example.ui.theme.GlowingCyan
+import com.example.ui.theme.TactileAmber
 import com.example.ui.theme.TactileCrimson
 import com.example.ui.theme.TactileEmerald
 import com.example.ui.theme.TextPrimary
@@ -75,6 +78,9 @@ fun ProfileScreen(
     isLightTheme: Boolean = false,
     onToggleLightTheme: (Boolean) -> Unit = {},
     blockedCount: Int = 0,
+    deviceStorageStats: DeviceStorageStats? = null,
+    allPermissionsGranted: Boolean = true,
+    onRequestPermissions: () -> Unit = {},
     userProfile: UserProfile?,
     currentUserId: String,
     fallbackEmail: String,
@@ -159,11 +165,22 @@ fun ProfileScreen(
                             .padding(horizontal = 20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            text = displayName,
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = TextPrimary
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = displayName,
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = TextPrimary
+                            )
+                            Icon(
+                                imageVector = Icons.Default.VerifiedUser,
+                                contentDescription = "Verified Account",
+                                tint = TactileEmerald,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "@$username • ${userProfile?.email?.ifBlank { fallbackEmail } ?: fallbackEmail} • ID: $shortCode",
@@ -175,7 +192,84 @@ fun ProfileScreen(
             }
         }
 
-        // 2. Theme (Green & White Light / Dark) & Language Preferences
+        // 2. Permissions & Mobile Device Storage Verification Card
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .frostedGlassCard(
+                        cornerRadius = 24.dp,
+                        accentGlow = if (allPermissionsGranted) TactileEmerald else TactileAmber
+                    )
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Storage,
+                        contentDescription = null,
+                        tint = TactileEmerald,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = language.tr(
+                            "পারমিশন ও মোবাইল স্টোরেজ স্ট্যাটাস (PERMISSIONS & MOBILE STORAGE)",
+                            "PERMISSIONS & MOBILE DEVICE STORAGE"
+                        ),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TactileEmerald
+                    )
+                }
+
+                SettingsSummaryRow(
+                    icon = Icons.Default.CheckCircle,
+                    title = language.tr(
+                        "ক্যামেরা, মাইক্রোফোন ও নোটিফিকেশন পারমিশন",
+                        "Camera, Mic & Notification Permissions"
+                    ),
+                    value = if (allPermissionsGranted) {
+                        language.shortTr("সব পারমিশন অ্যালাউ করা আছে ✅", "All Granted ✅")
+                    } else {
+                        language.shortTr("অ্যালাউ করুন (Allow All)", "Tap to Allow")
+                    },
+                    onClick = onRequestPermissions
+                )
+
+                if (!allPermissionsGranted) {
+                    NeoTactilePillButton(
+                        text = language.tr("সমস্ত পারমিশন অ্যালাউ করুন (Allow All Permissions)", "Allow All App Permissions"),
+                        icon = Icons.Default.Security,
+                        onClick = onRequestPermissions,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("profile_request_permissions_button")
+                    )
+                }
+
+                if (deviceStorageStats != null) {
+                    SettingsSummaryRow(
+                        icon = Icons.Default.DataUsage,
+                        title = language.tr(
+                            "মোবাইল স্টোরেজ স্পেস (Available / Total)",
+                            "Mobile Storage Space (Free / Total)"
+                        ),
+                        value = "${deviceStorageStats.freeDeviceGb} GB Free / ${deviceStorageStats.totalDeviceGb} GB"
+                    )
+
+                    SettingsSummaryRow(
+                        icon = Icons.Default.Folder,
+                        title = language.tr(
+                            "অ্যাপ মিডিয়া ও ভয়েস ফাইল (${deviceStorageStats.savedFilesCount} files)",
+                            "Saved App Media (${deviceStorageStats.savedFilesCount} files)"
+                        ),
+                        value = "${deviceStorageStats.appMediaUsedKb} KB • NeoTactileMedia"
+                    )
+                }
+            }
+        }
+
+        // 3. Theme (Green & White Light / Dark) & Language Preferences
         item {
             Column(
                 modifier = Modifier
@@ -241,7 +335,7 @@ fun ProfileScreen(
             }
         }
 
-        // 3. My QR Code & Short ID Card
+        // 4. My QR Code & Short ID Card
         item {
             Row(
                 modifier = Modifier
@@ -282,7 +376,7 @@ fun ProfileScreen(
             }
         }
 
-        // 4. Account, Username, Phone & Profile Details Card
+        // 5. Account, Username, Phone & Profile Details Card
         item {
             Column(
                 modifier = Modifier
@@ -390,7 +484,7 @@ fun ProfileScreen(
             }
         }
 
-        // 5. Complete Settings Organization (Chats, Wallpaper, Notifications, Storage, Privacy, Linked Devices)
+        // 6. Complete Settings Organization (Chats, Wallpaper, Notifications, Storage, Privacy, Linked Devices)
         item {
             Column(
                 modifier = Modifier
@@ -422,8 +516,8 @@ fun ProfileScreen(
                 NeoTactileToggleSwitch(
                     checked = twoStepEnabled,
                     onCheckedChange = { twoStepEnabled = it },
-                    label = language.tr("টু-স্টেপ ভেরিফিকেশন (Two-Step PIN)", "Two-Step Verification"),
-                    subtitle = language.tr("অ্যাকাউন্ট রিকভারি ও সিকিউরিটি পিন সুরক্ষা", "Extra PIN layer for account registration")
+                    label = language.tr("টু-স্টেপ ও অ্যান্টি-ফেক ভেরিফিকেশন", "Anti-Fake & Two-Step Verification"),
+                    subtitle = language.tr("ক্যাপচা ও ওটিপি ভেরিফাইড অ্যাকাউন্ট সুরক্ষা সক্রিয়", "Captcha + OTP Anti-Fake protection enabled")
                 )
 
                 SettingsSummaryRow(
@@ -442,12 +536,6 @@ fun ProfileScreen(
                 )
 
                 SettingsSummaryRow(
-                    icon = Icons.Default.DataUsage,
-                    title = language.tr("স্টোরেজ ও নেটওয়ার্ক ডাটা (Storage & Data)", "Storage, Cache & Network Usage"),
-                    value = "Media Auto-Compress ON"
-                )
-
-                SettingsSummaryRow(
                     icon = Icons.Default.Devices,
                     title = language.tr("লিঙ্কড ডিভাইস (Linked Devices)", "Linked Devices"),
                     value = "$deviceModel ($hardwareId)"
@@ -455,7 +543,7 @@ fun ProfileScreen(
             }
         }
 
-        // 6. Biometric / PIN Security Gate & Sign Out / Account Deletion Card
+        // 7. Biometric / PIN Security Gate & Sign Out Card
         item {
             Column(
                 modifier = Modifier

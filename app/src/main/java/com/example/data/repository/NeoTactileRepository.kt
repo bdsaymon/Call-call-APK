@@ -16,6 +16,7 @@ import com.example.data.model.generateShortCode
 import com.example.data.remote.OperationType
 import com.example.data.remote.handleFirestoreError
 import com.google.firebase.Firebase
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
@@ -39,6 +40,8 @@ import java.util.UUID
  * Dual-Layer Storage Engine Repository (Strict No-Demo Policy):
  * - Remote Cloud Layer: Cloud Firestore (using R.string.firestore_database_id)
  * - Local Private Override Layer: Room SQLite (`local_aliases` table)
+ * - Manual Verified Account Support: Supports both Google OAuth (Firebase Auth) and
+ *   Manual Verified Account sessions with local Room + state persistence.
  * - Zero hardcoded demo users or fake conversations.
  */
 class NeoTactileRepository(
@@ -55,10 +58,26 @@ class NeoTactileRepository(
     private val auth
         get() = Firebase.auth
 
+    private var manualVerifiedUid: String? = null
+
+    private val isCloudAuthenticated: Boolean
+        get() = auth.currentUser != null
+
+    fun setManualVerifiedUser(uid: String?) {
+        manualVerifiedUid = uid
+    }
+
     private fun requireUserId(): String {
         return auth.currentUser?.uid
+            ?: manualVerifiedUid
             ?: throw IllegalStateException("User must be signed in before accessing Firestore.")
     }
+
+    // Local session state when signed in via Manual Verified Account (without Google Firebase token)
+    private val _localUserProfile = MutableStateFlow<UserProfile?>(null)
+    private val _localMessagesByChat = MutableStateFlow<Map<String, List<ChatMessage>>>(emptyMap())
+    private val _localStories = MutableStateFlow<List<StoryItem>>(emptyList())
+    private val _localDeviceGatekeeper = MutableStateFlow<BlockedDevice?>(null)
 
     // =========================================================================
     // 1. USER PROFILE OPERATIONS (/users/{userId})
@@ -72,13 +91,35 @@ class NeoTactileRepository(
         isPrivate: Boolean = false
     ): Result<String> = runCatching {
         val uid = requireUserId()
+        val cleanUsername = displayName.lowercase().replace(Regex("[^a-z0-9]"), "")
+            .ifBlank { "user_${uid.take(6).lowercase()}" }
+        val initialBio = bio ?: "@$cleanUsername | Hey there! I am using NeoTactile."
+
+        if (!isCloudAuthenticated) {
+            val current = _localUserProfile.value
+            val updated = UserProfile(
+                id = uid,
+                uid = uid,
+                email = email.ifBlank { current?.email ?: "user@neotactile.app" },
+                displayName = displayName.ifBlank { current?.displayName ?: "Verified User" }.take(80),
+                photoUrl = photoUrl ?: current?.photoUrl,
+                coverUrl = coverUrl ?: current?.coverUrl ?: "preset://emerald_cover",
+                bio = initialBio.take(300),
+                isPrivate = isPrivate,
+                friendsList = current?.friendsList.orEmpty(),
+                isOnline = true,
+                lastSeen = Timestamp.now(),
+                createdAt = current?.createdAt ?: Timestamp.now(),
+                updatedAt = Timestamp.now()
+            )
+            _localUserProfile.value = updated
+            return@runCatching uid
+        }
+
         val docRef = db.collection("users").document(uid)
         try {
             val existingSnap = docRef.get().await()
             if (!existingSnap.exists()) {
-                val cleanUsername = displayName.lowercase().replace(Regex("[^a-z0-9]"), "")
-                    .ifBlank { "user_${uid.take(6).lowercase()}" }
-                val initialBio = bio ?: "@$cleanUsername | Hey there! I am using NeoTactile."
                 val profile = UserProfile(
                     id = uid,
                     uid = uid,
@@ -116,6 +157,9 @@ class NeoTactileRepository(
 
     suspend fun getUserProfileById(targetUserId: String): Result<UserProfile?> = runCatching {
         requireUserId()
+        if (!isCloudAuthenticated) {
+            return@runCatching _localUserProfile.value?.takeIf { it.uid == targetUserId }
+        }
         val docRef = db.collection("users").document(targetUserId)
         try {
             val snap = docRef.get().await()
@@ -130,6 +174,10 @@ class NeoTactileRepository(
 
     fun observeCurrentUserProfile(): Flow<UserProfile?> = flow {
         val uid = requireUserId()
+        if (!isCloudAuthenticated) {
+            emitAll(_localUserProfile)
+            return@flow
+        }
         val docRef = db.collection("users").document(uid)
         emitAll(
             docRef.snapshots()
@@ -170,7 +218,6 @@ class NeoTactileRepository(
     ): Result<String> = runCatching {
         val uid = requireUserId()
         val msgId = "msg_${UUID.randomUUID().toString().replace("-", "").take(20)}"
-        val docRef = db.collection("conversations").document(chatId).collection("messages").document(msgId)
         val effectiveParticipants = if (!participantIds.isNullOrEmpty()) {
             (participantIds + uid + receiverId).distinct().take(30)
         } else {
@@ -192,8 +239,21 @@ class NeoTactileRepository(
             readStatus = "SENT",
             replyToMessageId = replyToMessageId,
             replyToSenderName = replyToSenderName,
-            replyToPreview = replyToPreview
+            replyToPreview = replyToPreview,
+            timestamp = Timestamp.now(),
+            updatedAt = Timestamp.now()
         )
+
+        if (!isCloudAuthenticated) {
+            val map = _localMessagesByChat.value.toMutableMap()
+            val list = map[chatId].orEmpty().toMutableList()
+            list.add(message)
+            map[chatId] = list
+            _localMessagesByChat.value = map
+            return@runCatching msgId
+        }
+
+        val docRef = db.collection("conversations").document(chatId).collection("messages").document(msgId)
         try {
             docRef.set(message.toCreateMap()).await()
             msgId
@@ -207,6 +267,10 @@ class NeoTactileRepository(
 
     fun observeMessages(chatId: String): Flow<List<ChatMessage>> = flow {
         val uid = requireUserId()
+        if (!isCloudAuthenticated) {
+            emitAll(_localMessagesByChat.map { it[chatId].orEmpty() })
+            return@flow
+        }
         val path = "conversations/$chatId/messages"
         emitAll(
             db.collection("conversations").document(chatId).collection("messages")
@@ -230,6 +294,16 @@ class NeoTactileRepository(
         newContent: String
     ): Result<Unit> = runCatching {
         requireUserId()
+        if (!isCloudAuthenticated) {
+            val map = _localMessagesByChat.value.toMutableMap()
+            map[chatId] = map[chatId].orEmpty().map { msg ->
+                if (msg.messageId == messageId || msg.id == messageId) {
+                    msg.copy(content = newContent.trim().take(2000), isEdited = true, updatedAt = Timestamp.now())
+                } else msg
+            }
+            _localMessagesByChat.value = map
+            return@runCatching
+        }
         val docRef = db.collection("conversations").document(chatId).collection("messages").document(messageId)
         try {
             docRef.update(
@@ -252,6 +326,20 @@ class NeoTactileRepository(
         messageId: String
     ): Result<Unit> = runCatching {
         requireUserId()
+        if (!isCloudAuthenticated) {
+            val map = _localMessagesByChat.value.toMutableMap()
+            map[chatId] = map[chatId].orEmpty().map { msg ->
+                if (msg.messageId == messageId || msg.id == messageId) {
+                    msg.copy(
+                        content = "এই মেসেজটি মুছে ফেলা হয়েছে (Message deleted)",
+                        isDeleted = true,
+                        updatedAt = Timestamp.now()
+                    )
+                } else msg
+            }
+            _localMessagesByChat.value = map
+            return@runCatching
+        }
         val docRef = db.collection("conversations").document(chatId).collection("messages").document(messageId)
         try {
             docRef.update(
@@ -276,7 +364,6 @@ class NeoTactileRepository(
         emoji: String
     ): Result<Unit> = runCatching {
         requireUserId()
-        val docRef = db.collection("conversations").document(chatId).collection("messages").document(messageId)
         val currentMap = mutableMapOf<String, Int>()
         existingReactions?.split(",")?.forEach { part ->
             val kv = part.split(":")
@@ -292,11 +379,24 @@ class NeoTactileRepository(
         } else {
             currentMap[emoji] = 1
         }
-        val serialized = currentMap.entries.joinToString(",") { "${it.key}:${it.value}" }
+        val serialized = currentMap.entries.joinToString(",") { "${it.key}:${it.value}" }.take(500)
+
+        if (!isCloudAuthenticated) {
+            val map = _localMessagesByChat.value.toMutableMap()
+            map[chatId] = map[chatId].orEmpty().map { msg ->
+                if (msg.messageId == messageId || msg.id == messageId) {
+                    msg.copy(reactions = serialized, updatedAt = Timestamp.now())
+                } else msg
+            }
+            _localMessagesByChat.value = map
+            return@runCatching
+        }
+
+        val docRef = db.collection("conversations").document(chatId).collection("messages").document(messageId)
         try {
             docRef.update(
                 mapOf(
-                    "reactions" to serialized.take(500),
+                    "reactions" to serialized,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             ).await()
@@ -310,6 +410,16 @@ class NeoTactileRepository(
 
     suspend fun markMessageRead(chatId: String, messageId: String): Result<Unit> = runCatching {
         requireUserId()
+        if (!isCloudAuthenticated) {
+            val map = _localMessagesByChat.value.toMutableMap()
+            map[chatId] = map[chatId].orEmpty().map { msg ->
+                if (msg.messageId == messageId || msg.id == messageId) {
+                    msg.copy(readStatus = "READ", updatedAt = Timestamp.now())
+                } else msg
+            }
+            _localMessagesByChat.value = map
+            return@runCatching
+        }
         val docRef = db.collection("conversations").document(chatId).collection("messages").document(messageId)
         try {
             docRef.update(
@@ -339,7 +449,6 @@ class NeoTactileRepository(
     ): Result<String> = runCatching {
         val uid = requireUserId()
         val storyId = "story_${UUID.randomUUID().toString().replace("-", "").take(20)}"
-        val docRef = db.collection("stories").document(storyId)
         val expiresAtMs = System.currentTimeMillis() + TWENTY_FOUR_HOURS_MS
         val visibleUids = (listOf(uid) + visiblePeerIds).distinct().take(50)
         val story = StoryItem(
@@ -352,8 +461,14 @@ class NeoTactileRepository(
             mediaType = mediaType,
             caption = caption,
             visibleToUids = visibleUids,
-            expiresAt = expiresAtMs
+            expiresAt = expiresAtMs,
+            createdAt = Timestamp.now()
         )
+        if (!isCloudAuthenticated) {
+            _localStories.value = listOf(story) + _localStories.value
+            return@runCatching storyId
+        }
+        val docRef = db.collection("stories").document(storyId)
         try {
             docRef.set(story.toCreateMap()).await()
             storyId
@@ -367,6 +482,10 @@ class NeoTactileRepository(
 
     fun observeActiveStories(): Flow<List<StoryItem>> = flow {
         val uid = requireUserId()
+        if (!isCloudAuthenticated) {
+            emitAll(_localStories.map { list -> list.filter { it.expiresAt > System.currentTimeMillis() } })
+            return@flow
+        }
         val path = "stories"
         emitAll(
             db.collection("stories")
@@ -392,6 +511,17 @@ class NeoTactileRepository(
     suspend fun registerDeviceHeartbeat(hardwareId: String, deviceModel: String): Result<Unit> = runCatching {
         val uid = requireUserId()
         val safeHardwareId = hardwareId.replace(Regex("[^a-zA-Z0-9_\\-]"), "_").take(120)
+        if (!isCloudAuthenticated) {
+            _localDeviceGatekeeper.value = BlockedDevice(
+                id = safeHardwareId,
+                hardwareId = safeHardwareId,
+                ownerUid = uid,
+                deviceModel = deviceModel,
+                banned = false,
+                reason = "Active Verified Hardware"
+            )
+            return@runCatching
+        }
         val docRef = db.collection("blocked_devices").document(safeHardwareId)
         try {
             val snap = docRef.get().await()
@@ -424,6 +554,10 @@ class NeoTactileRepository(
 
     fun observeDeviceGatekeeper(hardwareId: String): Flow<BlockedDevice?> = flow {
         requireUserId()
+        if (!isCloudAuthenticated) {
+            emitAll(_localDeviceGatekeeper)
+            return@flow
+        }
         val safeHardwareId = hardwareId.replace(Regex("[^a-zA-Z0-9_\\-]"), "_").take(120)
         val docRef = db.collection("blocked_devices").document(safeHardwareId)
         emitAll(
@@ -478,7 +612,6 @@ class NeoTactileRepository(
             _archivedChatIds
         ) { dynamicPeers, aliases, blockedSet, pinnedSet, archivedSet ->
             val aliasByTarget = aliases.associateBy { it.targetUserId }
-            // Also restore any locally stored contacts from Room aliases if not yet loaded into _dynamicContacts
             val existingIds = dynamicPeers.map { it.userId }.toSet()
             val restoredFromRoom = aliases
                 .filter { it.targetUserId !in existingIds && !it.overriddenDisplayName.isNullOrBlank() }
@@ -513,7 +646,7 @@ class NeoTactileRepository(
      * Synchronizes the signed-in user's Firestore `friendsList` with real user profiles from `/users`.
      */
     suspend fun syncFriendsFromFirestore(friendIds: List<String>) {
-        if (friendIds.isEmpty()) return
+        if (friendIds.isEmpty() || !isCloudAuthenticated) return
         val uid = auth.currentUser?.uid ?: return
         val publicSnap = runCatching {
             db.collection("users")
@@ -563,14 +696,16 @@ class NeoTactileRepository(
         }
         _dynamicContacts.value = current
 
-        val docRef = db.collection("users").document(uid)
-        runCatching {
-            docRef.update(
-                mapOf(
-                    "friendsList" to FieldValue.arrayUnion(peer.userId),
-                    "updatedAt" to FieldValue.serverTimestamp()
-                )
-            ).await()
+        if (isCloudAuthenticated) {
+            val docRef = db.collection("users").document(uid)
+            runCatching {
+                docRef.update(
+                    mapOf(
+                        "friendsList" to FieldValue.arrayUnion(peer.userId),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
         }
 
         // Persist in Room so contact survives app restarts offline and online
@@ -863,20 +998,25 @@ class NeoTactileRepository(
         current.removeAll { it.userId == peerUserId }
         _dynamicContacts.value = current
 
-        val docRef = db.collection("users").document(uid)
-        runCatching {
-            docRef.update(
-                mapOf(
-                    "friendsList" to FieldValue.arrayRemove(peerUserId),
-                    "updatedAt" to FieldValue.serverTimestamp()
-                )
-            ).await()
+        if (isCloudAuthenticated) {
+            val docRef = db.collection("users").document(uid)
+            runCatching {
+                docRef.update(
+                    mapOf(
+                        "friendsList" to FieldValue.arrayRemove(peerUserId),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
         }
         clearLocalAliasOverride(peerUserId)
     }
 
     suspend fun searchDiscoverableUsers(query: String): Result<List<UserProfile>> = runCatching {
         requireUserId()
+        if (!isCloudAuthenticated) {
+            return@runCatching emptyList()
+        }
         val trimmed = query.trim().removePrefix("@")
         val snapshot = db.collection("users")
             .whereEqualTo("isPrivate", false)
