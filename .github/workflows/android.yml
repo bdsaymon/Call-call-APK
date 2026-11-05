@@ -30,6 +30,11 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The legacy 'tools' package no longer exists in Google's SDK
+          # repository and makes sdkmanager exit 1, failing the whole job.
+          # Only install packages that are actually published.
+          packages: 'platform-tools'
 
       - name: Accept Android SDK Licenses & Install API 36.1 / Build-Tools
         run: |
@@ -73,8 +78,57 @@ jobs:
               -dname "CN=Android Debug,O=Android,C=US"
           fi
 
+      - name: Cache Robolectric android-all jars
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ hashFiles('gradle/libs.versions.toml', 'app/build.gradle.kts') }}
+
       - name: Run Unit & Robolectric Verification Tests
-        run: ./gradlew :app:testDebugUnitTest --no-daemon
+        run: |
+          set -o pipefail
+          # Maven Central intermittently rate-limits GitHub's shared runner
+          # IPs with HTTP 429; Gradle caches whatever downloaded successfully,
+          # so a retry only re-requests the missing artifacts.
+          for attempt in 1 2 3; do
+            if ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace 2>&1 | tee test-output.log; then
+              exit 0
+            fi
+            echo "::warning::Test attempt $attempt failed; retrying in $((attempt * 20))s..."
+            sleep $((attempt * 20))
+          done
+          exit 1
+
+      - name: Publish Test Failure Diagnostics
+        if: failure()
+        run: |
+          {
+            grep -nE "What went wrong|Caused by:|error:|^e: |Timeout|Execution failed" test-output.log 2>/dev/null || true
+            grep -nE "FAILED" test-output.log 2>/dev/null || true
+            grep -h -o 'message="[^"]*"' app/build/test-results/testDebugUnitTest/*.xml 2>/dev/null || true
+          } > failure-summary.txt || true
+          echo "---- failure summary ----"
+          cat failure-summary.txt || true
+          count=0
+          while IFS= read -r line; do
+            if [ -z "$line" ]; then continue; fi
+            echo "::error title=Unit test failure::${line:0:400}"
+            count=$((count+1))
+            if [ "$count" -ge 8 ]; then break; fi
+          done < failure-summary.txt
+
+      - name: Upload Test Diagnostics Artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-diagnostics
+          path: |
+            test-output.log
+            failure-summary.txt
+            app/build/reports/tests/
+            app/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Build Debug APK
         run: |
