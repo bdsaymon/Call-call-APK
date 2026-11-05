@@ -1690,7 +1690,7 @@ private fun WhatsAppActiveCallScreen(
     val signalingStatus = activeCallSession?.status ?: "RINGING"
     val formattedDuration = remember(elapsedSec, signalingStatus, iceState) {
         if (signalingStatus == "RINGING" && elapsedSec < 3) {
-            "Ringing (WebRTC ICE: $iceState)..."
+            "Ringing..."
         } else {
             String.format(Locale.US, "%02d:%02d", elapsedSec / 60, elapsedSec % 60)
         }

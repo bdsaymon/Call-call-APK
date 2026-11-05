@@ -704,7 +704,7 @@ class NeoTactileViewModel(
                 replyToSenderName = replyMsg?.senderName,
                 replyToPreview = replyMsg?.content?.take(100)
             ).onSuccess {
-                _statusBannerMessage.value = "Document uploaded & shared across devices: $fileName"
+                _statusBannerMessage.value = "Document sent: $fileName"
             }.onFailure { e ->
                 _statusBannerMessage.value = "File share error: ${e.localizedMessage}"
             }
@@ -760,7 +760,7 @@ class NeoTactileViewModel(
                 replyToSenderName = replyMsg?.senderName,
                 replyToPreview = replyMsg?.content?.take(100)
             ).onSuccess {
-                _statusBannerMessage.value = "Voice message uploaded & sent"
+                _statusBannerMessage.value = "Voice message sent"
             }.onFailure { e ->
                 _statusBannerMessage.value = "Voice message failed: ${e.localizedMessage}"
             }
@@ -823,7 +823,7 @@ class NeoTactileViewModel(
                 replyToSenderName = replyMsg?.senderName,
                 replyToPreview = replyMsg?.content?.take(100)
             ).onSuccess {
-                _statusBannerMessage.value = "Photo uploaded & shared across devices"
+                _statusBannerMessage.value = "Photo sent"
             }.onFailure { e ->
                 _statusBannerMessage.value = "Photo share failed: ${e.localizedMessage}"
             }
@@ -1157,7 +1157,7 @@ class NeoTactileViewModel(
                 bio = formattedBio,
                 isPrivate = isPrivate
             ).onSuccess {
-                _statusBannerMessage.value = "Profile saved to Cloud Firestore"
+                _statusBannerMessage.value = "Profile updated"
             }.onFailure { e ->
                 _statusBannerMessage.value = "Profile update failed: ${e.localizedMessage}"
             }

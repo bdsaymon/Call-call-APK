@@ -927,19 +927,19 @@ fun ProfileScreen(
                 WhatsAppSettingsRow(
                     icon = Icons.Default.Image,
                     title = "Photos",
-                    subtitle = "Saved in NeoTactileMedia/images",
+                    subtitle = "Saved to device gallery",
                     onClick = {}
                 )
                 WhatsAppSettingsRow(
                     icon = Icons.Default.Mic,
                     title = "Voice messages",
-                    subtitle = "Saved in NeoTactileMedia/voice_notes",
+                    subtitle = "Saved voice recordings",
                     onClick = {}
                 )
                 WhatsAppSettingsRow(
                     icon = Icons.Default.Description,
                     title = "Documents & Downloaded files",
-                    subtitle = "${deviceStorageStats?.savedFilesCount ?: savedMediaFiles.size} files in NeoTactileMedia",
+                    subtitle = "${deviceStorageStats?.savedFilesCount ?: savedMediaFiles.size} files on this device",
                     onClick = {}
                 )
                 if (savedMediaFiles.isNotEmpty()) {
@@ -1027,7 +1027,7 @@ fun ProfileScreen(
                     WhatsAppSettingsRow(
                         icon = Icons.Default.PhoneAndroid,
                         title = deviceModel,
-                        subtitle = "Active now • Hardware ID: $hardwareId",
+                        subtitle = "Active now • This phone",
                         onClick = {}
                     )
                 } else {
@@ -1035,7 +1035,7 @@ fun ProfileScreen(
                         WhatsAppSettingsRow(
                             icon = Icons.Default.PhoneAndroid,
                             title = "${session.deviceModel} (${session.platform})",
-                            subtitle = "Hardware ID: ${session.hardwareId} • Tap to unlink",
+                            subtitle = "Linked device • Tap to unlink",
                             onClick = { onRemoveLinkedDevice(session.id) }
                         )
                     }

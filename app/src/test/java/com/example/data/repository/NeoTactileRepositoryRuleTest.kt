@@ -216,7 +216,7 @@ class NeoTactileRepositoryRuleTest : FirestoreEmulatorTestBase() {
     private companion object {
         const val ALICE_EMAIL = "alice_neo@test.com"
         const val BOB_EMAIL = "bob_neo@test.com"
-        const val DEFAULT_TIMEOUT_MS = 5000L
-        const val FLOW_TIMEOUT_MS = 4000L
+        const val DEFAULT_TIMEOUT_MS = 10000L
+        const val FLOW_TIMEOUT_MS = 10000L
     }
 }

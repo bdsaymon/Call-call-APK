@@ -497,7 +497,7 @@ fun LoginScreen(
                         text = if (isRegisterMode) "Register" else "Login",
                         style = MaterialTheme.typography.headlineLarge.copy(
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 30.sp
+                            fontSize = 28.sp
                         ),
                         color = Color(0xFF0F2D4A),
                         textAlign = TextAlign.Center
@@ -507,77 +507,21 @@ fun LoginScreen(
 
                     Text(
                         text = if (isRegisterMode) {
-                            "Register & verify your real cloud identity across devices."
+                            "Create an account to get started."
                         } else {
-                            "Welcome Back! Sign in to sync messages across devices."
+                            "Welcome Back! Please login to continue."
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF5A738E),
                         textAlign = TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Login / Register Mode Switch Pill
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFFDCEBFA))
-                            .border(1.dp, Color.White, RoundedCornerShape(16.dp))
-                            .padding(4.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (!isRegisterMode) Color(0xFF0A7AFF) else Color.Transparent)
-                                .clickable {
-                                    isRegisterMode = false
-                                    errorMessage = null
-                                    infoMessage = null
-                                }
-                                .padding(vertical = 8.dp)
-                                .testTag("switch_login_mode_tab"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Login (লগইন)",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (!isRegisterMode) Color.White else Color(0xFF1F456E),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (isRegisterMode) Color(0xFF0A7AFF) else Color.Transparent)
-                                .clickable {
-                                    isRegisterMode = true
-                                    errorMessage = null
-                                    infoMessage = null
-                                }
-                                .padding(vertical = 8.dp)
-                                .testTag("switch_register_mode_tab"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Register & Verify",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (isRegisterMode) Color.White else Color(0xFF1F456E),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
 
                     LiquidGlassTextField(
                         value = userIdInput,
                         onValueChange = { userIdInput = it },
-                        placeholder = "Email or User ID (e.g. rahim@gmail.com)",
+                        placeholder = "User ID",
                         leadingIcon = Icons.Default.Person,
                         testTag = "manual_user_id_input"
                     )
@@ -587,7 +531,7 @@ fun LoginScreen(
                         LiquidGlassTextField(
                             value = displayNameInput,
                             onValueChange = { displayNameInput = it },
-                            placeholder = "Full Real Name (আসল নাম)",
+                            placeholder = "Full Name",
                             leadingIcon = Icons.Default.VerifiedUser,
                             testTag = "manual_display_name_input"
                         )
@@ -596,7 +540,7 @@ fun LoginScreen(
                         LiquidGlassTextField(
                             value = phoneInput,
                             onValueChange = { phoneInput = it },
-                            placeholder = "Mobile Number (+8801...)",
+                            placeholder = "Phone Number",
                             leadingIcon = Icons.Default.Phone,
                             testTag = "manual_phone_input"
                         )
@@ -607,7 +551,7 @@ fun LoginScreen(
                     LiquidGlassTextField(
                         value = passwordInput,
                         onValueChange = { passwordInput = it },
-                        placeholder = "Password (min 6 chars)",
+                        placeholder = "Password",
                         leadingIcon = Icons.Default.Lock,
                         isPassword = !passwordVisible,
                         trailingContent = {
@@ -916,7 +860,7 @@ fun LoginScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = if (isRegisterMode) "Verify & Create Cloud Account" else "Login",
+                                    text = if (isRegisterMode) "Register" else "Login",
                                     style = MaterialTheme.typography.titleMedium.copy(
                                         fontWeight = FontWeight.Bold,
                                         color = Color.White
@@ -926,7 +870,7 @@ fun LoginScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -934,142 +878,160 @@ fun LoginScreen(
                     ) {
                         HorizontalDivider(
                             modifier = Modifier.weight(1f),
-                            color = Color(0xFFBBD5EC)
+                            color = Color(0xFFC7DEEF)
                         )
                         Text(
-                            text = "  Or Sign in with Google  ",
+                            text = "  Or Login With  ",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color(0xFF5D7690)
                         )
                         HorizontalDivider(
                             modifier = Modifier.weight(1f),
-                            color = Color(0xFFBBD5EC)
+                            color = Color(0xFFC7DEEF)
                         )
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Direct Google OAuth Button (Jetpack Credential Manager)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(Color.White)
-                            .border(1.5.dp, Color(0xFFC1DCF2), RoundedCornerShape(24.dp))
-                            .clickable {
-                                errorMessage = null
-                                isLoading = true
-                                onGoogleSignInClicked(
-                                    context = context,
-                                    credentialManager = credentialManager,
-                                    onAuthSuccess = {
-                                        isLoading = false
-                                        onAuthSuccess()
-                                    },
-                                    onAuthError = { msg ->
-                                        isLoading = false
-                                        errorMessage = msg
-                                    },
-                                    scope = scope,
-                                    onAuthCancelled = {
-                                        isLoading = false
-                                    }
-                                )
-                            }
-                            .testTag("google_sign_in_button"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = "G",
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 18.sp,
-                                color = Color(0xFFDB4437)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "Sign in with Google",
-                                style = MaterialTheme.typography.titleSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF0F2D4A)
-                                )
-                            )
-                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Device Permissions & Mobile Storage Readiness Pill
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFFE4F1FC))
-                            .border(1.dp, Color(0xFFB8D8F4), RoundedCornerShape(16.dp))
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    // Social Login Row with Real Google Sign-In and Decorative Social Circles matching the Mockup
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = if (permissionsGranted) Icons.Default.CheckCircle else Icons.Default.Security,
-                                    contentDescription = null,
-                                    tint = if (permissionsGranted) Color(0xFF00897B) else Color(0xFFE65100),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (permissionsGranted) {
-                                        "Camera, Mic & Notifications Ready"
-                                    } else {
-                                        "Permissions Required"
-                                    },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF103459),
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-
-                            if (!permissionsGranted) {
-                                Text(
-                                    text = "Allow All",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF0062E0),
-                                    fontWeight = FontWeight.ExtraBold,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color.White)
-                                        .clickable {
-                                            permissionLauncher.launch(getRequiredRuntimePermissions().toTypedArray())
+                        // Google Sign-In Circle Button (Functional Credential Manager)
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .shadow(4.dp, CircleShape, spotColor = Color(0xFF4285F4))
+                                .clip(CircleShape)
+                                .background(Color.White)
+                                .border(1.2.dp, Color(0xFFCDE2F5), CircleShape)
+                                .clickable {
+                                    errorMessage = null
+                                    isLoading = true
+                                    onGoogleSignInClicked(
+                                        context = context,
+                                        credentialManager = credentialManager,
+                                        onAuthSuccess = {
+                                            isLoading = false
+                                            onAuthSuccess()
+                                        },
+                                        onAuthError = { msg ->
+                                            isLoading = false
+                                            errorMessage = msg
+                                        },
+                                        scope = scope,
+                                        onAuthCancelled = {
+                                            isLoading = false
                                         }
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                        .testTag("request_all_permissions_button")
-                                )
-                            }
+                                    )
+                                }
+                                .testTag("google_sign_in_button"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "G",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 20.sp,
+                                color = Color(0xFF4285F4)
+                            )
                         }
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Folder,
-                                contentDescription = null,
-                                tint = Color(0xFF0277BD),
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        // Facebook Circle
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .shadow(4.dp, CircleShape, spotColor = Color(0xFF1877F2))
+                                .clip(CircleShape)
+                                .background(Color.White)
+                                .border(1.2.dp, Color(0xFFCDE2F5), CircleShape)
+                                .clickable {
+                                    infoMessage = "Please use Google or User ID to sign in."
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
                             Text(
-                                text = "Cloud Firestore + Device Storage (NeoTactileMedia) Active • HW: ${hardwareId.take(8).uppercase()}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF4A6988)
+                                text = "f",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 21.sp,
+                                color = Color(0xFF1877F2)
                             )
                         }
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        // YouTube Circle
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .shadow(4.dp, CircleShape, spotColor = Color(0xFFFF0000))
+                                .clip(CircleShape)
+                                .background(Color.White)
+                                .border(1.2.dp, Color(0xFFCDE2F5), CircleShape)
+                                .clickable {
+                                    infoMessage = "Please use Google or User ID to sign in."
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "▶",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color(0xFFFF0000)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        // LinkedIn Circle
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .shadow(4.dp, CircleShape, spotColor = Color(0xFF0A66C2))
+                                .clip(CircleShape)
+                                .background(Color.White)
+                                .border(1.2.dp, Color(0xFFCDE2F5), CircleShape)
+                                .clickable {
+                                    infoMessage = "Please use Google or User ID to sign in."
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "in",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 16.sp,
+                                color = Color(0xFF0A66C2)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Clean, subtle Switch Auth Mode text link
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = if (isRegisterMode) "Already have an account? " else "Don't have an account? ",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF5A738E)
+                        )
+                        Text(
+                            text = if (isRegisterMode) "Login" else "Register",
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFF0066E6),
+                            modifier = Modifier
+                                .clickable {
+                                    isRegisterMode = !isRegisterMode
+                                    errorMessage = null
+                                    infoMessage = null
+                                }
+                                .testTag("toggle_auth_mode_link")
+                        )
                     }
                 }
 
