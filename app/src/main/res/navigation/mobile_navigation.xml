@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/mobile_navigation"
+    app:startDestination="@+id/nav_chats">
+
+    <destination
+        android:id="@+id/nav_chats"
+        android:label="Chats &amp; Updates" />
+
+    <destination
+        android:id="@+id/nav_calls"
+        android:label="Audio &amp; Video Calls" />
+
+    <destination
+        android:id="@+id/nav_communities"
+        android:label="Users &amp; Communities" />
+
+    <destination
+        android:id="@+id/nav_settings"
+        android:label="Profile &amp; Settings" />
+</navigation>

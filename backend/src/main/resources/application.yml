@@ -1,0 +1,27 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: neotactile-messaging-backend
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/neotactile}
+    username: ${DATABASE_USER:postgres}
+    password: ${DATABASE_PASSWORD:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+webrtc:
+  stun-url: ${WEBRTC_STUN_URL:stun:stun.l.google.com:19302}
+  turn-url: ${WEBRTC_TURN_URL:turn:turn.neotactile.example.com:3478}
+  turn-username: ${WEBRTC_TURN_USER:neotactile_turn}
+  turn-credential: ${WEBRTC_TURN_SECRET:change_me_in_production}

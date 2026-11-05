@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">NeoTactile Chat</string>
+    <string name="auth_title">NEO-TACTILE</string>
+    <string name="auth_subtitle">Encrypted Tactile Social &amp; Real-Time Audio Mesh</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    <string name="nav_home">Pulse</string>
+    <string name="nav_chat">Comms</string>
+    <string name="nav_profile">Identity</string>
+    <string name="nav_peers">Peers</string>
+    <string name="contact_directory_title">TACTILE PEER DIRECTORY</string>
+    <string name="contact_add_btn">+ ADD CONTACT</string>
+    <string name="local_alias_modal_title">Local Device Alias Override</string>
+    <string name="local_alias_modal_desc">Stored exclusively in on-device Room SQLite. Never transmitted to Firebase.</string>
+    <string name="device_banned_title">HARDWARE ACCESS REVOKED</string>
+    <string name="biometric_lock_title">BIOMETRIC SECURITY GATE</string>
+    <string name="voice_record_hold">Tap to Record AAC Voice Note</string>
+</resources>

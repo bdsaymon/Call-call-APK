@@ -1,0 +1,6 @@
+{
+  "name": "NeoTactile Chat",
+  "description": "A Neo-Tactile social and real-time chat application with frosted glassmorphism, voice notes, ephemeral stories, local alias overrides, and interactive peer discovery directory.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

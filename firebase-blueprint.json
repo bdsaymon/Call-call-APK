@@ -1,0 +1,119 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile document with Neo-Tactile social and privacy settings. PII fields (email, fcmToken) are restricted to owner, friends, or admin on direct get.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Authenticated user UID" },
+        "email": { "type": "string", "description": "User email address (PII)" },
+        "displayName": { "type": "string", "description": "Public display name" },
+        "photoUrl": { "type": "string", "description": "Avatar photo URL" },
+        "coverUrl": { "type": "string", "description": "Profile cover banner URL" },
+        "bio": { "type": "string", "description": "User biography text" },
+        "isPrivate": { "type": "boolean", "description": "Whether profile is private" },
+        "friendsList": { "type": "array", "description": "Bounded list of friend UIDs (max 50)" },
+        "fcmToken": { "type": "string", "description": "Device push token" },
+        "isOnline": { "type": "boolean", "description": "Online presence indicator" },
+        "lastSeen": { "type": "string", "format": "date-time", "description": "Server timestamp of last activity (FieldValue.serverTimestamp())" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp of creation (FieldValue.serverTimestamp())" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp of last update (FieldValue.serverTimestamp())" }
+      },
+      "required": ["uid", "email", "displayName", "isPrivate", "friendsList", "isOnline", "lastSeen", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Real-time 1-on-1 and Group chat message supporting text, voice notes (.m4a), images, files, replies, edits, deletes, and emoji reactions.",
+      "type": "object",
+      "properties": {
+        "messageId": { "type": "string", "description": "Unique message ID" },
+        "chatId": { "type": "string", "description": "Parent conversation ID" },
+        "senderId": { "type": "string", "description": "Sender UID" },
+        "receiverId": { "type": "string", "description": "Receiver UID or Group ID" },
+        "participantIds": { "type": "array", "description": "Bounded list of participant UIDs (2 to 30) for query alignment" },
+        "senderName": { "type": "string", "description": "Sender display name" },
+        "content": { "type": "string", "description": "Text content or caption" },
+        "mediaType": { "type": "string", "enum": ["TEXT", "IMAGE", "VIDEO", "AUDIO", "FILE"], "description": "Type of message payload" },
+        "mediaUrl": { "type": "string", "description": "Optional URI/URL for media, file, or voice note" },
+        "fileName": { "type": "string", "description": "Optional attached file name" },
+        "audioDurationMs": { "type": "integer", "description": "Voice note duration in milliseconds" },
+        "readStatus": { "type": "string", "enum": ["SENT", "DELIVERED", "READ"], "description": "Delivery/read status" },
+        "replyToMessageId": { "type": "string", "description": "Optional ID of message being replied to" },
+        "replyToSenderName": { "type": "string", "description": "Optional sender name of message being replied to" },
+        "replyToPreview": { "type": "string", "description": "Optional text preview of message being replied to" },
+        "isEdited": { "type": "boolean", "description": "Whether message was edited" },
+        "isDeleted": { "type": "boolean", "description": "Whether message was soft-deleted" },
+        "reactions": { "type": "string", "description": "Serialized emoji reactions summary" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp of status update (FieldValue.serverTimestamp())" }
+      },
+      "required": ["messageId", "chatId", "senderId", "receiverId", "participantIds", "senderName", "content", "mediaType", "audioDurationMs", "readStatus", "timestamp", "updatedAt"]
+    },
+    "StoryItem": {
+      "title": "StoryItem",
+      "description": "24-hour ephemeral story item with glowing cyan ring indicator.",
+      "type": "object",
+      "properties": {
+        "storyId": { "type": "string", "description": "Story document ID" },
+        "authorId": { "type": "string", "description": "Author UID" },
+        "authorName": { "type": "string", "description": "Author display name" },
+        "authorAvatarUrl": { "type": "string", "description": "Author avatar URL" },
+        "mediaUrl": { "type": "string", "description": "Story visual media URL or preset key" },
+        "mediaType": { "type": "string", "enum": ["IMAGE", "VIDEO", "TEXT_CARD"], "description": "Story media type" },
+        "caption": { "type": "string", "description": "Story overlay caption" },
+        "visibleToUids": { "type": "array", "description": "Bounded list of UIDs permitted to view the story (max 50)" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp of creation (FieldValue.serverTimestamp())" },
+        "expiresAt": { "type": "integer", "description": "Expiration epoch timestamp in milliseconds (createdAt + 24h)" }
+      },
+      "required": ["storyId", "authorId", "authorName", "mediaUrl", "mediaType", "caption", "visibleToUids", "createdAt", "expiresAt"]
+    },
+    "BlockedDevice": {
+      "title": "BlockedDevice",
+      "description": "Hardware ID registry and Device Gatekeeper ban entry.",
+      "type": "object",
+      "properties": {
+        "hardwareId": { "type": "string", "description": "Settings.Secure.ANDROID_ID hardware identifier" },
+        "ownerUid": { "type": "string", "description": "UID of the user registered with this device" },
+        "deviceModel": { "type": "string", "description": "Device manufacturer and model name" },
+        "banned": { "type": "boolean", "description": "Whether this hardware ID is blocked by Device Gatekeeper" },
+        "reason": { "type": "string", "description": "Admin ban reason" },
+        "bannedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())" }
+      },
+      "required": ["hardwareId", "ownerUid", "deviceModel", "banned", "reason", "bannedAt", "updatedAt"]
+    },
+    "AdminRole": {
+      "title": "AdminRole",
+      "description": "Trusted admin role registry document under /admins/{adminId}.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Admin user UID" },
+        "grantedBy": { "type": "string", "description": "Granting admin UID" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp (FieldValue.serverTimestamp())" }
+      },
+      "required": ["uid", "grantedBy", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles scoped to owner UID or friends."
+    },
+    "/conversations/{chatId}/messages/{msgId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Messages inside a 1-on-1 or group conversation, scoped to participants."
+    },
+    "/stories/{storyId}": {
+      "schema": { "$ref": "#/entities/StoryItem" },
+      "description": "24-hour ephemeral stories scoped via visibleToUids and authorId."
+    },
+    "/blocked_devices/{androidId}": {
+      "schema": { "$ref": "#/entities/BlockedDevice" },
+      "description": "Hardware device gatekeeper status keyed by ANDROID_ID."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRole" },
+      "description": "Trusted admin role lookup table."
+    }
+  }
+}
