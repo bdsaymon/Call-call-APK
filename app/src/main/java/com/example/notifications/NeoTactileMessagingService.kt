@@ -55,17 +55,21 @@ class NeoTactileMessagingService : FirebaseMessagingService() {
         val type = data["type"] ?: "MESSAGE"
         val title = remoteMessage.notification?.title
             ?: data["senderName"]
+            ?: data["callerName"]
             ?: getString(R.string.app_name)
         val body = remoteMessage.notification?.body
             ?: data["content"]
+            ?: data["body"]
             ?: "New message received"
 
-        if (type == "CALL") {
+        if (type.equals("CALL", ignoreCase = true) || type.equals("incoming_call", ignoreCase = true)) {
             val callType = data["callType"] ?: "AUDIO"
+            val callId = data["callId"] ?: ""
             NotificationHelper.showIncomingCallNotification(
                 context = applicationContext,
                 callerName = title,
-                callType = callType
+                callType = callType,
+                callId = callId
             )
         } else {
             NotificationHelper.showMessageNotification(
@@ -82,34 +86,41 @@ class NeoTactileMessagingService : FirebaseMessagingService() {
 }
 
 object NotificationHelper {
-    private const val CHANNEL_MESSAGES = "neotactile_messages_channel"
-    private const val CHANNEL_CALLS = "neotactile_calls_channel"
+    const val CHANNEL_MESSAGES = "neotactile_messages"
+    const val CHANNEL_CALLS = "neotactile_calls"
+    private const val LEGACY_CHANNEL_MESSAGES = "neotactile_messages_channel"
+    private const val LEGACY_CHANNEL_CALLS = "neotactile_calls_channel"
 
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
-            val msgChannel = NotificationChannel(
-                CHANNEL_MESSAGES,
-                "Messages",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Real-time incoming chat message notifications"
-                enableVibration(true)
+
+            val ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+
+            listOf(CHANNEL_MESSAGES, LEGACY_CHANNEL_MESSAGES).forEach { chId ->
+                val msgChannel = NotificationChannel(
+                    chId,
+                    "Messages",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Real-time incoming chat message notifications"
+                    enableVibration(true)
+                }
+                manager.createNotificationChannel(msgChannel)
             }
-            val callChannel = NotificationChannel(
-                CHANNEL_CALLS,
-                "Incoming Calls",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Incoming voice and video call alerts"
-                enableVibration(true)
-                setSound(
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
-                    null
-                )
+
+            listOf(CHANNEL_CALLS, LEGACY_CHANNEL_CALLS).forEach { chId ->
+                val callChannel = NotificationChannel(
+                    chId,
+                    "Incoming Calls",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Incoming voice and video call alerts"
+                    enableVibration(true)
+                    setSound(ringtoneUri, null)
+                }
+                manager.createNotificationChannel(callChannel)
             }
-            manager.createNotificationChannel(msgChannel)
-            manager.createNotificationChannel(callChannel)
         }
     }
 
@@ -159,12 +170,16 @@ object NotificationHelper {
     fun showIncomingCallNotification(
         context: Context,
         callerName: String,
-        callType: String
+        callType: String,
+        callId: String = ""
     ) {
         if (!canPostNotifications(context)) return
         ensureChannels(context)
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("incoming_call_id", callId)
+            putExtra("incoming_caller_name", callerName)
+            putExtra("incoming_call_type", callType)
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -176,12 +191,14 @@ object NotificationHelper {
         val notification = NotificationCompat.Builder(context, CHANNEL_CALLS)
             .setSmallIcon(android.R.drawable.sym_action_call)
             .setContentTitle(callerName)
-            .setContentText(" WhatsApp $callLabel")
+            .setContentText(callLabel)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setAutoCancel(true)
-            .setOngoing(false)
+            .setOngoing(true)
             .setContentIntent(pendingIntent)
+            .setFullScreenIntent(pendingIntent, true)
+            .addAction(android.R.drawable.ic_menu_call, "Answer", pendingIntent)
             .build()
 
         runCatching {

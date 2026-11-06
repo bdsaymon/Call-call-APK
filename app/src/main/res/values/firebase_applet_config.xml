@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <resources>
     <string name="firestore_database_id" translatable="false">ai-studio-android-bb67e5ae-b69c-4855-b37e-606187dc144b</string>
+    <string name="default_web_client_id" translatable="false">826237155105-n1al28hl0mdhnfp80i5m5mrsdfku8kpj.apps.googleusercontent.com</string>
 </resources>

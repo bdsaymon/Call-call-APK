@@ -29,6 +29,7 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.PersistentCacheSettings
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.snapshots
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.storage.storage
@@ -219,8 +220,19 @@ class NeoTactileRepository(
             replyToPreview = replyToPreview
         )
 
-        val docRef = db.collection("conversations").document(chatId).collection("messages").document(msgId)
+        val convRef = db.collection("conversations").document(chatId)
+        val docRef = convRef.collection("messages").document(msgId)
         try {
+            val convData = mapOf(
+                "chatId" to chatId,
+                "participants" to effectiveParticipants,
+                "lastMessage" to if (mediaType == "TEXT") content.take(300) else "[$mediaType]",
+                "lastSenderId" to uid,
+                "lastSenderName" to senderName.ifBlank { "Verified User" },
+                "lastMediaType" to mediaType,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            runCatching { convRef.set(convData, SetOptions.merge()).await() }
             docRef.set(message.toCreateMap()).await()
             msgId
         } catch (e: CancellationException) {
@@ -1288,7 +1300,23 @@ class NeoTactileRepository(
             toUserId = targetUser.uid,
             status = "PENDING"
         )
-        _contactRequests.value = listOf(item) + _contactRequests.value
+        _contactRequests.value = listOf(item) + _contactRequests.value.filter { it.requestId != reqId }
+
+        // Persist to Firestore contact_requests collection
+        runCatching {
+            db.collection("contact_requests").document(reqId).set(
+                mapOf(
+                    "requestId" to reqId,
+                    "fromUserId" to uid,
+                    "fromDisplayName" to senderName,
+                    "fromShortCode" to generateShortCode(uid),
+                    "toUserId" to targetUser.uid,
+                    "status" to "PENDING",
+                    "createdAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        }
+
         val chatId = buildConversationId(uid, targetUser.uid)
         sendMessage(
             chatId = chatId,
@@ -1312,6 +1340,111 @@ class NeoTactileRepository(
                 email = targetUser.email
             )
         )
+    }
+
+    fun observeIncomingContactRequests(): Flow<List<ContactRequestItem>> = flow {
+        val uid = requireUserId()
+        emitAll(
+            db.collection("contact_requests")
+                .whereEqualTo("toUserId", uid)
+                .whereEqualTo("status", "PENDING")
+                .snapshots()
+                .map { snap ->
+                    snap.documents.mapNotNull { doc ->
+                        val reqId = doc.getString("requestId") ?: doc.id
+                        val fromUid = doc.getString("fromUserId") ?: return@mapNotNull null
+                        val fromName = doc.getString("fromDisplayName") ?: "NeoTactile User"
+                        val shortCode = doc.getString("fromShortCode") ?: generateShortCode(fromUid)
+                        val status = doc.getString("status") ?: "PENDING"
+                        val timestampMs = doc.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis()
+                        ContactRequestItem(
+                            requestId = reqId,
+                            fromUserId = fromUid,
+                            fromDisplayName = fromName,
+                            fromShortCode = shortCode,
+                            toUserId = uid,
+                            status = status,
+                            timestampMs = timestampMs
+                        )
+                    }
+                }
+                .catch { emit(emptyList()) }
+        )
+    }
+
+    suspend fun acceptContactRequest(
+        request: ContactRequestItem,
+        myDisplayName: String
+    ): Result<Unit> = runCatching {
+        val uid = requireUserId()
+        // 1. Update contact_requests document status to ACCEPTED
+        runCatching {
+            db.collection("contact_requests").document(request.requestId).update(
+                mapOf(
+                    "status" to "ACCEPTED",
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        }
+
+        // 2. Add requester to current user's friendsList
+        runCatching {
+            db.collection("users").document(uid).update(
+                mapOf(
+                    "friendsList" to FieldValue.arrayUnion(request.fromUserId),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        }
+
+        // 3. Add current user to requester's friendsList
+        runCatching {
+            db.collection("users").document(request.fromUserId).update(
+                mapOf(
+                    "friendsList" to FieldValue.arrayUnion(uid),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        }
+
+        // 4. Update in-memory contact requests
+        _contactRequests.value = _contactRequests.value.filter { it.requestId != request.requestId }
+
+        // 5. Add to local resolved contacts
+        addContact(
+            ResolvedContactProfile(
+                userId = request.fromUserId,
+                originalDisplayName = request.fromDisplayName,
+                originalAvatarUri = "preset://avatar_emerald",
+                overriddenDisplayName = null,
+                overriddenAvatarUri = null,
+                roleTag = "Verified Contact",
+                isOnline = true
+            )
+        )
+
+        // 6. Send acceptance message
+        val chatId = buildConversationId(uid, request.fromUserId)
+        sendMessage(
+            chatId = chatId,
+            receiverId = request.fromUserId,
+            senderName = myDisplayName,
+            content = "🤝 Contact request accepted! You can now call and message each other.",
+            mediaType = "TEXT"
+        )
+    }
+
+    suspend fun rejectContactRequest(requestId: String): Result<Unit> = runCatching {
+        requireUserId()
+        runCatching {
+            db.collection("contact_requests").document(requestId).update(
+                mapOf(
+                    "status" to "REJECTED",
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+        }
+        _contactRequests.value = _contactRequests.value.filter { it.requestId != requestId }
     }
 
     suspend fun toggleBlockUser(targetUserId: String): Boolean {

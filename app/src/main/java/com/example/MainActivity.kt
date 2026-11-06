@@ -165,24 +165,35 @@ fun NeoTactileRootApp(
     deviceIdentityManager: DeviceIdentityManager,
     auth: FirebaseAuth? = runCatching { Firebase.auth }.getOrNull()
 ) {
+    val context = LocalContext.current
     val currentUser by remember(auth) {
         auth?.authStateFlow() ?: kotlinx.coroutines.flow.flowOf(null)
     }.collectAsStateWithLifecycle(initialValue = auth?.currentUser)
+    var manualSession by remember {
+        mutableStateOf(VerifiedAccountStore.getActiveManualSession(context))
+    }
     val hardwareId = remember { deviceIdentityManager.getHardwareAndroidId() }
-    val user = currentUser
 
-    if (user == null) {
+    val user = currentUser
+    val isSessionActive = user != null || manualSession != null
+
+    if (!isSessionActive) {
         LoginScreen(
             hardwareId = hardwareId,
-            onAuthSuccess = {},
-            onManualVerifiedSuccess = {}
+            onAuthSuccess = {
+                // currentUser will automatically update via authStateFlow
+            },
+            onManualVerifiedSuccess = { session ->
+                manualSession = session
+            }
         )
     } else {
-        val effectiveUid = user.uid
-        val effectiveEmail = user.email ?: "operator@neotactile.app"
-        val effectiveDisplayName = user.displayName?.ifBlank { null }
-            ?: effectiveEmail.substringBefore("@").uppercase()
-        val effectivePhotoUrl = user.photoUrl?.toString()
+        val effectiveUid = user?.uid ?: manualSession?.uid ?: "user_default"
+        val effectiveEmail = user?.email ?: manualSession?.userIdOrEmail ?: "operator@neotactile.app"
+        val effectiveDisplayName = user?.displayName?.ifBlank { null }
+            ?: manualSession?.displayName?.ifBlank { null }
+            ?: effectiveEmail.substringBefore("@").replaceFirstChar { it.uppercase() }
+        val effectivePhotoUrl = user?.photoUrl?.toString()
 
         AuthenticatedMainShell(
             currentUserId = effectiveUid,
@@ -190,7 +201,11 @@ fun NeoTactileRootApp(
             currentUserDisplayName = effectiveDisplayName,
             currentUserPhotoUrl = effectivePhotoUrl,
             deviceIdentityManager = deviceIdentityManager,
-            onSignOutComplete = {}
+            onSignOutComplete = {
+                manualSession = null
+                VerifiedAccountStore.clearActiveManualSession(context)
+                runCatching { auth?.signOut() }
+            }
         )
     }
 }

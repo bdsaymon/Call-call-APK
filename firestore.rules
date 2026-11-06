@@ -223,7 +223,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isSignedIn() && isValidId(userId) && (
                    isOwner(userId) ||
-                   (resource != null && request.auth.uid in resource.data.friendsList) ||
+                   (resource != null && (request.auth.uid in resource.data.friendsList || resource.data.isPrivate == false)) ||
                    isAdmin()
                  );
       allow list: if isSignedIn() && (!resource.data.isPrivate || resource.data.uid == request.auth.uid || isAdmin());
@@ -249,13 +249,34 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 2. CONVERSATIONS MESSAGES SUBCOLLECTION
-    //    - Read/List: Strictly restricted to conversation participants or admin
-    //    - Create: Only authenticated sender (incoming().senderId == request.auth.uid)
-    //    - Update:
-    //      * Message author (senderId) may edit/delete content, reactions, readStatus
-    //      * Non-author participant (receiverId) may ONLY update readStatus, reactions, updatedAt
+    // 2. CONVERSATIONS & MESSAGES
+    //    - Conversation parent document tracks participants, last message, timestamps
+    //    - Messages subcollection tracks encrypted and rich media chat messages
     // =========================================================================
+    match /conversations/{chatId} {
+      allow get: if isSignedIn() && isValidId(chatId) &&
+                    (request.auth.uid in resource.data.participants || isAdmin());
+      allow list: if isSignedIn() &&
+                     (request.auth.uid in resource.data.participants || isAdmin());
+      allow create, update: if isSignedIn() && isValidId(chatId) &&
+                               (request.auth.uid in incoming().participants || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Contact Requests collection for mutual discovery & friend requests
+    match /contact_requests/{requestId} {
+      allow get: if isSignedIn() && isValidId(requestId) &&
+                    (resource.data.fromUserId == request.auth.uid || resource.data.toUserId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(requestId) &&
+                       incoming().fromUserId == request.auth.uid &&
+                       incoming().requestId == requestId;
+      allow update: if isSignedIn() && isValidId(requestId) &&
+                       (existing().toUserId == request.auth.uid || existing().fromUserId == request.auth.uid || isAdmin());
+      allow delete: if isSignedIn() && isValidId(requestId) &&
+                       (existing().fromUserId == request.auth.uid || existing().toUserId == request.auth.uid || isAdmin());
+    }
+
     match /conversations/{chatId}/messages/{msgId} {
       allow get: if isSignedIn() &&
                     isValidId(chatId) &&

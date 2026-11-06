@@ -197,7 +197,16 @@ class NeoTactileViewModel(
             initialValue = emptyList()
         )
 
-    val contactRequests: StateFlow<List<ContactRequestItem>> = repository.contactRequests
+    val contactRequests: StateFlow<List<ContactRequestItem>> = kotlinx.coroutines.flow.combine(
+        repository.contactRequests,
+        repository.observeIncomingContactRequests().catch { emit(emptyList()) }
+    ) { local, remote ->
+        (remote + local).distinctBy { it.requestId }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000L),
+        initialValue = emptyList()
+    )
     val blockedUserIds: StateFlow<Set<String>> = repository.blockedUserIds
     val pinnedChatIds: StateFlow<Set<String>> = repository.pinnedChatIds
     val archivedChatIds: StateFlow<Set<String>> = repository.archivedChatIds
@@ -1000,6 +1009,29 @@ class NeoTactileViewModel(
                 }
                 .onFailure { e ->
                     _statusBannerMessage.value = "Request failed: ${e.localizedMessage}"
+                }
+        }
+    }
+
+    fun acceptIncomingContactRequest(request: ContactRequestItem) {
+        val myName = userProfile.value?.displayName?.ifBlank { currentUserDisplayName } ?: currentUserDisplayName
+        viewModelScope.launch {
+            repository.acceptContactRequest(request, myName)
+                .onSuccess {
+                    _selectedPeerId.value = request.fromUserId
+                    _statusBannerMessage.value = "Accepted contact request from ${request.fromDisplayName}"
+                }
+                .onFailure { e ->
+                    _statusBannerMessage.value = "Accept failed: ${e.localizedMessage}"
+                }
+        }
+    }
+
+    fun rejectIncomingContactRequest(requestId: String) {
+        viewModelScope.launch {
+            repository.rejectContactRequest(requestId)
+                .onSuccess {
+                    _statusBannerMessage.value = "Contact request declined"
                 }
         }
     }

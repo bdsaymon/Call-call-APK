@@ -230,6 +230,7 @@ object WebRtcHardwareController {
 
     private val gatheredIceCandidates = CopyOnWriteArrayList<String>()
     private val appliedRemoteCandidates = CopyOnWriteArrayList<String>()
+    private val pendingIceCandidatesQueue = CopyOnWriteArrayList<String>()
     private var remoteDescriptionApplied = false
 
     @Synchronized
@@ -356,6 +357,7 @@ object WebRtcHardwareController {
         return runCatching {
             gatheredIceCandidates.clear()
             appliedRemoteCandidates.clear()
+            pendingIceCandidatesQueue.clear()
             remoteDescriptionApplied = false
 
             startLocalMediaTracks(
@@ -367,7 +369,19 @@ object WebRtcHardwareController {
             val iceServers = listOf(
                 PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
                 PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
-                PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer()
+                PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer(),
+                PeerConnection.IceServer.builder("turn:openrelay.metered.ca:80")
+                    .setUsername("openrelay")
+                    .setPassword("openrelay")
+                    .createIceServer(),
+                PeerConnection.IceServer.builder("turn:openrelay.metered.ca:443")
+                    .setUsername("openrelay")
+                    .setPassword("openrelay")
+                    .createIceServer(),
+                PeerConnection.IceServer.builder("turns:openrelay.metered.ca:443?transport=tcp")
+                    .setUsername("openrelay")
+                    .setPassword("openrelay")
+                    .createIceServer()
             )
 
             val rtcConfig = PeerConnection.RTCConfiguration(iceServers).apply {
@@ -524,6 +538,7 @@ object WebRtcHardwareController {
                             override fun onCreateSuccess(p0: SessionDescription?) {}
                             override fun onSetSuccess() {
                                 remoteDescriptionApplied = true
+                                drainPendingIceCandidates()
                                 if (cont.isActive) cont.resume(true)
                             }
                             override fun onCreateFailure(err: String?) {
@@ -602,6 +617,7 @@ object WebRtcHardwareController {
                         override fun onCreateSuccess(p0: SessionDescription?) {}
                         override fun onSetSuccess() {
                             remoteDescriptionApplied = true
+                            drainPendingIceCandidates()
                             addEncodedRemoteIceCandidates(remoteIceCandidates)
                         }
                         override fun onCreateFailure(p0: String?) {}
@@ -611,7 +627,18 @@ object WebRtcHardwareController {
                 )
             } else if (remoteDescriptionApplied) {
                 addEncodedRemoteIceCandidates(remoteIceCandidates)
+            } else if (!remoteIceCandidates.isNullOrBlank()) {
+                addEncodedRemoteIceCandidates(remoteIceCandidates)
             }
+        }
+    }
+
+    private fun drainPendingIceCandidates() {
+        val pc = activePeerConnection ?: return
+        if (!remoteDescriptionApplied) return
+        while (pendingIceCandidatesQueue.isNotEmpty()) {
+            val candidate = pendingIceCandidatesQueue.removeFirstOrNull() ?: break
+            applySingleIceCandidate(pc, candidate)
         }
     }
 
@@ -621,21 +648,31 @@ object WebRtcHardwareController {
         encodedCandidates.split(";").forEach { entry ->
             val trimmed = entry.trim()
             if (trimmed.isNotBlank() && !appliedRemoteCandidates.contains(trimmed)) {
-                val parts = trimmed.split("|", limit = 3)
-                if (parts.size == 3) {
-                    val sdpMid = parts[0]
-                    val sdpMLineIndex = parts[1].toIntOrNull() ?: 0
-                    val sdp = parts[2]
-                    runCatching {
-                        pc.addIceCandidate(IceCandidate(sdpMid, sdpMLineIndex, sdp))
-                        appliedRemoteCandidates.add(trimmed)
+                if (!remoteDescriptionApplied) {
+                    if (!pendingIceCandidatesQueue.contains(trimmed)) {
+                        pendingIceCandidatesQueue.add(trimmed)
                     }
-                } else if (trimmed.startsWith("candidate:")) {
-                    runCatching {
-                        pc.addIceCandidate(IceCandidate("0", 0, trimmed))
-                        appliedRemoteCandidates.add(trimmed)
-                    }
+                } else {
+                    applySingleIceCandidate(pc, trimmed)
                 }
+            }
+        }
+    }
+
+    private fun applySingleIceCandidate(pc: PeerConnection, candidateStr: String) {
+        val parts = candidateStr.split("|", limit = 3)
+        if (parts.size == 3) {
+            val sdpMid = parts[0]
+            val sdpMLineIndex = parts[1].toIntOrNull() ?: 0
+            val sdp = parts[2]
+            runCatching {
+                pc.addIceCandidate(IceCandidate(sdpMid, sdpMLineIndex, sdp))
+                appliedRemoteCandidates.add(candidateStr)
+            }
+        } else if (candidateStr.startsWith("candidate:")) {
+            runCatching {
+                pc.addIceCandidate(IceCandidate("0", 0, candidateStr))
+                appliedRemoteCandidates.add(candidateStr)
             }
         }
     }
